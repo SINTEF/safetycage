@@ -29,6 +29,9 @@ dependencies = [
     "tqdm>=4.67.3",
 ]
 
+[project.optional-dependencies]
+red = ["gpytorch>=1.9", "torch>=1.13"]
+
 [project.urls]
 Homepage = "https://github.com/safety-cage/safetycage"
 Issues = "https://github.com/safety-cage/safetycage/issues"
