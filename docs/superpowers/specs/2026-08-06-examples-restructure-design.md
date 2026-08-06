@@ -3,6 +3,27 @@
 Date: 2026-08-06
 Status: Approved, not yet implemented
 
+## Amendment, 2026-08-06: iris replaced by digits
+
+This spec names **iris** as the zero-dependency lead example. During
+implementation planning that choice was measured and found unworkable, and the
+plan uses `sklearn.datasets.load_digits` instead.
+
+iris has 150 samples, which yields a 24-sample validation split containing
+**one** misclassification. Threshold selection would optimise a metric computed
+from a single positive — the example could not demonstrate the thing it exists
+to demonstrate. wine (178 samples) is worse, at zero validation errors.
+
+digits has 1797 samples, 10 classes, and a 288-sample validation split with 33
+errors under a depth-capped RandomForest. It ships inside scikit-learn exactly
+as iris does, so the zero-dependency property this spec relies on is preserved.
+It is also 8×8 handwritten digits, which makes it a progression into the mnist
+example rather than a jump.
+
+Everything else in this spec stands. Read "iris" below as "digits"; the
+structure, dependency strategy, path helper and testing approach are unchanged.
+See `docs/superpowers/plans/2026-08-06-examples-foundation-digits.md`.
+
 ## Problem
 
 The worked examples for safetycage live in a separate repository,
@@ -247,8 +268,7 @@ datamodule, fits or loads a model, runs one method, and asserts the shape and
 range of `pvalues_`. Run manually with `pytest`.
 
 iris needs no dependency beyond the package core — it uses
-`sklearn.datasets.load_iris` (bundled, no download), `RandomForestClassifier`
-and `StandardScaler`, and scikit-learn is already a core dependency. It is
+`sklearn.datasets.load_iris` (bundled, no download), `RandomForestClassifier`and `StandardScaler`, and scikit-learn is already a core dependency. It is
 therefore the cheapest example to check and the natural first target once CI
 exists.
 
