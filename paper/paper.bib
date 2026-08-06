@@ -14,6 +14,38 @@
   bibsource    = {dblp computer science bibliography, https://dblp.org}
 }
 
+@inproceedings{Granese21,
+author = {Granese, Federica and Romanelli, Marco and Gorla, Daniele and Palamidessi, Catuscia and Piantanida, Pablo},
+title = {DOCTOR: a simple method for detecting misclassification errors},
+year = {2021},
+isbn = {9781713845393},
+publisher = {Curran Associates Inc.},
+address = {Red Hook, NY, USA},
+abstract = {Deep neural networks (DNNs) have shown to perform very well on large scale object recognition problems and lead to widespread use for real-world applications, including situations where DNN are implemented as "black boxes". A promising approach to secure their use is to accept decisions that are likely to be correct while discarding the others. In this work, we propose DOCTOR, a simple method that aims to identify whether the prediction of a DNN classifier should (or should not) be trusted so that, consequently, it would be possible to accept it or to reject it. Two scenarios are investigated: Totally Black Box (TBB) where only the soft-predictions are available and Partially Black Box (PBB) where gradient-propagation to perform input pre-processing is allowed. Empirically, we show that DOCTOR outperforms all state-of-the-art methods on various well-known images and sentiment analysis datasets. In particular, we observe a reduction of up to 4\% of the false rejection rate (FRR) in the PBB scenario. DOCTOR can be applied to any pre-trained model, it does not require prior information about the underlying dataset and is as simple as the simplest available methods in the literature.},
+booktitle = {Proceedings of the 35th International Conference on Neural Information Processing Systems},
+articleno = {433},
+numpages = {13},
+series = {NIPS '21}
+}
+
+
+@InProceedings{pmlr-v233-johnsen24a,
+  title = 	 {SafetyCage: A misclassification detector for feed-forward neural networks},
+  author =       {Johnsen, P{\r{a}}l Vegard and Remonato, Filippo},
+  booktitle = 	 {Proceedings of the 5th Northern Lights Deep Learning Conference ({NLDL})},
+  pages = 	 {113--119},
+  year = 	 {2024},
+  editor = 	 {Lutchyn, Tetiana and Ramírez Rivera, Adín and Ricaud, Benjamin},
+  volume = 	 {233},
+  series = 	 {Proceedings of Machine Learning Research},
+  month = 	 {09--11 Jan},
+  publisher =    {PMLR},
+  pdf = 	 {https://proceedings.mlr.press/v233/johnsen24a/johnsen24a.pdf},
+  url = 	 {https://proceedings.mlr.press/v233/johnsen24a.html},
+  abstract = 	 {Deep learning classifiers have reached state-of-the-art performance in many fields, particularly so image classification. Wrong class assignment by the classifiers can often be inconsequential when distinguishing pictures of cats and dogs, but in more critical operations like autonomous driving vehicles or process control in industry, wrong classifications can lead to disastrous events. While reducing the error rate of the classifier is of primary importance, it is impossible to completely remove it. Having a system that is able to flag wrong or suspicious classifications is therefore a necessary component for safety and robustness in operations. In this work, we present a general statistical inference framework for detection of misclassifications. We test our approach on two well-known benchmark datasets: MNIST and CIFAR-10. We show that, given the underlying classifier is well trained, SafetyCage is effective at flagging wrong classifications. We also include a detailed discussion of the drawbacks, and what can be done to improve the approach.}
+}
+
+
 @inproceedings{
 johnsen2024spardacus,
 title={{SPARDACUS} SafetyCage: A new misclassification detector},
@@ -21,4 +53,71 @@ author={P{\r{a}}l Vegard Johnsen and Filippo Remonato and Shawn Benedict and Alb
 booktitle={Northern Lights Deep Learning Conference 2025},
 year={2024},
 url={https://openreview.net/forum?id=3FswRo4Lhj}
+}
+
+
+@inproceedings{Cordier_Flexible_and_Systematic_2023,
+author = {Cordier, Thibault and Blot, Vincent and Lacombe, Louis and Morzadec, Thomas and Capitaine, Arnaud and Brunel, Nicolas},
+booktitle = {Conformal and Probabilistic Prediction with Applications},
+title = {{Flexible and Systematic Uncertainty Estimation with Conformal Prediction via the MAPIE library}},
+year = {2023}
+}
+
+@misc{cleanlab,
+      title={Pervasive Label Errors in Test Sets Destabilize Machine Learning Benchmarks}, 
+      author={Curtis G. Northcutt and Anish Athalye and Jonas Mueller},
+      year={2021},
+      eprint={2103.14749},
+      archivePrefix={arXiv},
+      primaryClass={stat.ML},
+      url={https://arxiv.org/abs/2103.14749}, 
+}
+
+@INPROCEEDINGS{pytorch_ood,
+  author={Kirchheim, Konstantin and Filax, Marco and Ortmeier, Frank},
+  booktitle={2022 IEEE/CVF Conference on Computer Vision and Pattern Recognition Workshops (CVPRW)}, 
+  title={PyTorch-OOD: A Library for Out-of-Distribution Detection based on PyTorch}, 
+  year={2022},
+  volume={},
+  number={},
+  pages={4350-4359},
+  keywords={Training;Deep learning;Neural networks;Predictive models;Licenses;Libraries;Safety},
+  doi={10.1109/CVPRW56347.2022.00481}}
+
+@article{Chorev_Deepchecks_A_Library_2022,
+author = {Chorev, Shir and Tannor, Philip and Ben Israel, Dan and Bressler, Noam and Gabbay, Itay and Hutnik, Nir and Liberman, Jonatan and Perlmutter, Matan and Romanyshyn, Yurii and Rokach, Lior},
+journal = {Journal of Machine Learning Research},
+pages = {1--6},
+title = {{Deepchecks: A Library for Testing and Validating Machine Learning Models and Data}},
+url = {http://jmlr.org/papers/v23/22-0281.html},
+volume = {23},
+year = {2022}
+}
+
+@misc{microsoft_raitoolbox,
+  author       = {{Microsoft}},
+  title        = {Responsible {AI} Toolbox},
+  year         = {2021},
+  howpublished = {\url{https://github.com/microsoft/responsible-ai-toolbox}},
+  note         = {Accessed: 2026-05-12}
+}
+
+@InProceedings{Kueppers_2020_CVPR_Workshops,
+   author = {Küppers, Fabian and Kronenberger, Jan and Shantia, Amirhossein and Haselhoff, Anselm},
+   title = {Multivariate Confidence Calibration for Object Detection},
+   booktitle = {The IEEE/CVF Conference on Computer Vision and Pattern Recognition (CVPR) Workshops},
+   month = {June},
+   year = {2020}
+}
+
+@article{Leeuwenburg2024,
+doi = {10.21105/joss.06889},
+url = {https://doi.org/10.21105/joss.06889},
+year = {2024}, publisher = {The Open Journal},
+volume = {9},
+number = {99},
+pages = {6889},
+author = {Leeuwenburg, Tennessee and Loveday, Nicholas and Ebert, Elizabeth E. and Cook, Harrison and Khanarmuei, Mohammadreza and Taggart, Robert J. and Ramanathan, Nikeeth and Carroll, Maree and Chong, Stephanie and Griffiths, Aidan and Sharples, John},
+title = {scores: A Python package for verifying and evaluating models and predictions with xarray},
+journal = {Journal of Open Source Software}
 }
