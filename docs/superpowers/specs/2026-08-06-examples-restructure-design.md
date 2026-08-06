@@ -50,6 +50,7 @@ demonstrating a private fork of the code they exist to demonstrate.
 ```
 safetycage-pypi/examples/
 ├── README.md                     # index: start with iris → mnist → cifar10
+├── utils.py                      # fix_pythonpath_if_working_locally()
 ├── iris/
 │   ├── README.md
 │   ├── iris_example.ipynb        # MSP
@@ -111,6 +112,72 @@ through each method on that shared setup. Today mnist has three notebooks
 (doctor, msp, spardacus) at roughly 200 code-lines each that repeat the same
 preamble. Consolidating removes the duplication and lets a reader compare
 methods on identical data.
+
+### Resolving `import safetycage` to the working tree
+
+`examples/utils.py` provides a single helper, called at the top of each notebook:
+
+```python
+import sys
+from pathlib import Path
+
+
+def fix_pythonpath_if_working_locally():
+    """Make `import safetycage` resolve to this repo's src/ when run from a clone."""
+    for candidate in (Path.cwd(), *Path.cwd().parents):
+        if (candidate / "src" / "safetycage").is_dir():
+            sys.path.insert(0, str(candidate / "src"))
+            return
+```
+
+```python
+from utils import fix_pythonpath_if_working_locally
+
+fix_pythonpath_if_working_locally()
+```
+
+This is adapted from the equivalent helper in the `darts` project. **It is
+deliberately not a copy of theirs, and the differences are load-bearing.** The
+darts version reads:
+
+```python
+if basename(cwd) == "examples":
+    sys.path.insert(0, dirname(cwd))
+```
+
+Transplanted unchanged it would fail here in two independent ways, both
+silently:
+
+1. **darts uses a flat layout; this repo uses a src layout.** In darts the
+   package sits at the repository root, so inserting `dirname(cwd)` is enough.
+   Here the package is at `src/safetycage/`, so `dirname(cwd)` points at a
+   directory containing no `safetycage/` package and the insert does nothing.
+
+2. **darts keeps notebooks directly in `examples/`; this design nests them one
+   level deeper.** The guard `basename(cwd) == "examples"` is false for
+   `examples/mnist/`, so the function would return without acting.
+
+Walking up the parents until a `src/safetycage/` directory is found fixes both,
+and works regardless of how deeply a notebook is nested.
+
+The helper is a safety net, not the supported path. `uv sync` installs the
+project editable — verified to resolve `import safetycage` to
+`src/safetycage/` — so the documented workflow in each README is:
+
+```bash
+uv sync --group examples
+uv run jupyter lab examples/mnist/mnist_example.ipynb
+```
+
+The helper matters for the case `uv sync` does not cover: someone who opens a
+notebook without syncing, with a released safetycage already installed
+elsewhere, would otherwise silently exercise the published version instead of
+the working tree.
+
+This is unrelated to importing each example's own `modules.py`. Jupyter places
+the notebook's directory on `sys.path`, so a notebook in `examples/mnist/`
+imports its sibling `modules.py` without help. Only `pytest` needs assistance
+there, which the testing section covers.
 
 ### Dependencies
 
