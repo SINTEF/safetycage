@@ -1,9 +1,10 @@
-from typing import Any, Optional
+from typing import Optional
 from abc import ABC, abstractmethod
 import numpy as np
 import joblib
 from pathlib import Path
-
+from safetycage.modelmodule import ModelModule
+from safetycage.datamodule import DataModule
 class SafetyCage(ABC):
     """
     Abstract base class for safety cage methods.
@@ -33,8 +34,8 @@ class SafetyCage(ABC):
 
     def __init__(
         self,
-        model_module,
-        data_module: Any,
+        model_module: ModelModule,
+        data_module: DataModule,
         **kwargs
         ) -> None:
         """
@@ -45,7 +46,7 @@ class SafetyCage(ABC):
 
         Args:
             model_module: Model module used for predictions and activations.
-            data_module (Any): Data module providing datasets and class information.
+            data_module: Data module providing datasets and class information.
         """
 
         self.model_module = model_module
