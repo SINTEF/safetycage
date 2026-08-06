@@ -1,0 +1,140 @@
+\documentclass[border=10pt]{standalone}
+\usepackage{tikz}
+\usetikzlibrary{positioning, arrows.meta, calc}
+
+\begin{document}
+\begin{tikzpicture}[
+    classname/.style={
+        rectangle, draw=black, thick,
+        minimum width=4.8cm,
+        minimum height=0.7cm,
+        font=\bfseries\ttfamily\small,
+        fill=black!8,
+        anchor=north,
+    },
+    stereotype/.style={
+        font=\itshape\scriptsize,
+    },
+    methods/.style={
+        rectangle, draw=black, thick,
+        minimum width=4.8cm,
+        text width=4.4cm,
+        font=\ttfamily\scriptsize,
+        inner sep=4pt,
+        anchor=north,
+        align=left,
+    },
+    comp/.style={
+        -{Diamond[open, length=8pt, width=6pt]},
+        thick,
+    },
+    inherit/.style={
+        -{Triangle[open, length=8pt, width=8pt]},
+        thick,
+    },
+    rolename/.style={
+        font=\scriptsize\itshape,
+        fill=white,
+        inner sep=1pt,
+    },
+    concrete/.style={
+        rectangle, draw=black, thick,
+        minimum width=2.8cm,
+        minimum height=0.7cm,
+        font=\bfseries\ttfamily\small,
+        fill=white,
+    },
+]
+
+% =============================================
+% Row 1, Col 1: ModelModule (top left)
+% =============================================
+\node[classname] (mm-name) at (0, 0) {ModelModule};
+\node[stereotype, above=0pt of mm-name.north] {\guillemotleft abstract\guillemotright};
+\node[methods, below=-\pgflinewidth of mm-name.south] (mm-methods) {
+    +model : Any\\
+    +selected\_layers : List\\
+    \hrulefill\\
+    +\_get\_predictions()\\
+    +\_get\_activations()\\
+    +\_get\_pre\_activations()\\
+    +\_calc\_model\_shape()\\
+};
+
+% =============================================
+% Row 2, Col 1: DataModule (bottom left)
+% =============================================
+\node[classname] (dm-name) at (0, -6) {DataModule};
+\node[stereotype, above=0pt of dm-name.north] {\guillemotleft abstract\guillemotright};
+\node[methods, below=-\pgflinewidth of dm-name.south] (dm-methods) {
+    +num\_classes : int\\
+    +classes : List\\
+    +dataset\_name : str\\
+    \hrulefill\\
+    +setup()\\
+    +\_load\_data()\\
+    +\_transform()\\
+    +\_split()\\
+};
+
+% =============================================
+% Row 1, Col 2: SafetyCage (top right)
+% =============================================
+\node[classname] (sc-name) at (8.5, 0) {SafetyCage};
+\node[stereotype, above=0pt of sc-name.north] {\guillemotleft abstract\guillemotright};
+\node[methods, below=-\pgflinewidth of sc-name.south] (sc-methods) {
+    +alpha : float\\
+    +leq : bool\\
+    \hrulefill\\
+    +train\_cage()$^*$\\
+    +predict()$^*$\\
+    +flag()\\
+    +find\_best\_threshold()\\
+    +save\_cage() / load\_cage()\\
+};
+
+% =============================================
+% Row 2, Col 2: Concrete MDMs (bottom right)
+% =============================================
+\node[concrete] (msp) at (8.5, -6.0) {MSP};
+\node[concrete] (doc) at (8.5, -7.0) {DOCTOR};
+\node[concrete] (mah) at (8.5, -8.0) {Mahalanobis};
+\node[concrete] (spa) at (8.5, -9.0) {SPARDACUS};
+
+% =============================================
+% Composition: ModelModule --> SafetyCage (straight horizontal)
+% =============================================
+\coordinate (mm-attach) at (sc-name.west |- mm-name.east);
+\draw[comp] (mm-name.east) -- (mm-attach);
+\node[rolename] at (4.25, 0.3) {model\_module};
+
+% =============================================
+% Composition: DataModule --> SafetyCage (right, up, right)
+% =============================================
+\coordinate (dm-exit) at (dm-methods.east |- dm-name.east);
+\coordinate (dm-mid) at (4.25, -6);
+\coordinate (dm-up) at (4.25, -0.7);
+\coordinate (dm-attach) at (sc-name.west |- dm-up);
+\draw[comp] (dm-exit) -- (dm-mid) -- (dm-up) -- (dm-attach);
+\node[rolename] at (4.25, -3.0) {data\_module};
+
+% =============================================
+% Inheritance: MDMs --> SafetyCage (short left, vertical trunk, up)
+% =============================================
+\coordinate (trunk-x) at (6.8, 0);
+\draw[thick] (msp.west) -- (msp.west -| trunk-x);
+\draw[thick] (doc.west) -- (doc.west -| trunk-x);
+\draw[thick] (mah.west) -- (mah.west -| trunk-x);
+\draw[thick] (spa.west) -- (spa.west -| trunk-x);
+% Vertical trunk
+\draw[thick] (msp.west -| trunk-x) -- (spa.west -| trunk-x);
+% Trunk up to SafetyCage bottom
+\draw[inherit] (msp.west -| trunk-x) -- (sc-methods.south -| trunk-x);
+
+% =============================================
+% Legend
+% =============================================
+\node[font=\scriptsize, anchor=north west] at (0, -10.0) {$^*$ = abstract (subclass must implement)};
+
+\end{tikzpicture}
+\end{document}
