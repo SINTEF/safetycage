@@ -29,7 +29,7 @@ bibliography: paper.bib
 
 # Summary
 
-`Safetycage` is a Python package that provides a unified, framework-agnostic interface for misclassification detection in machine learning classifiers. It implements several detection methods — including Maximum Softmax Probability (MSP), DOCTOR, Mahalanobis distance, and SPARDACUS — under a common abstraction that decouples the detection algorithm from the user's choice of model and data. Given a trained classifier, `Safetycage` learns to identify individual samples that are likely to be misclassified, enabling practitioners to flag unreliable predictions before they are acted upon.
+`Safetycage` is a Python package that provides a unified, framework-agnostic interface for misclassification detection in machine learning classifiers. It implements several detection methods — including Maximum Softmax Probability (MSP) [@HendrycksG16c], DOCTOR [@Granese21], Mahalanobis distance [@pmlr-v233-johnsen24a], and SPARDACUS [@johnsen2024spardacus] under a common abstraction that decouples the detection algorithm from the user's choice of model and data. Given a trained classifier, `Safetycage` learns to identify individual samples that are likely to be misclassified, enabling practitioners to flag unreliable predictions before they are acted upon.
 
 # Statement of Need
 
@@ -39,30 +39,37 @@ Deployed classifiers inevitably make errors, yet most prediction pipelines provi
 
 # State of the Field
 
-Several software packages address related aspects of model reliability. Cleanlab [@cleanlab] focuses on identifying label errors in training data using confident learning, rather than detecting misclassifications at inference time. PyTorch-OOD [@pytorch_ood] provides Out-of-Distribution detection methods but is restricted to the PyTorch ecosystem. Deepchecks [@deepchecks] and Microsoft's Responsible AI Toolbox [@responsible_ai] offer comprehensive model auditing suites, but are designed for batch evaluation rather than providing an extensible API for implementing and comparing detection algorithms. NetCal [@netcal] and Scores [@scores] focus on calibrating probability outputs, which is a form of error mitigation rather than explicit identification of misclassified samples.
+Several software packages address related aspects of machine learning model reliability. MAPIE [@Cordier_Flexible_and_Systematic_2023] provides model-agnostic prediction intervals and prediction sets using conformal prediction techniques, but this is not used further down in the pipeline to flag misclassifications. Cleanlab [@cleanlab] focuses on identifying label errors in training data using confident learning, rather than detecting misclassifications at inference time. PyTorch-OOD [@pytorch_ood] provides Out-of-Distribution detection methods, but is restricted to the PyTorch ecosystem. Deepchecks [@Chorev_Deepchecks_A_Library_2022] and Microsoft's Responsible AI Toolbox [@microsoft_raitoolbox] offer comprehensive model auditing suites, but are designed for batch evaluation rather than providing an extensible API for implementing and comparing detection algorithms. NetCal [@Kueppers_2020_CVPR_Workshops] and Scores [@Leeuwenburg2024] focus on calibrating probability outputs, which is a form of error mitigation rather than explicit identification of misclassified samples.
 
-`Safetycage` bridges the gap between specialized OOD detection tools and general-purpose auditing frameworks by providing a unified, framework-agnostic abstraction layer specifically for misclassification detection.
+`Safetycage` bridges the gap between prediction interval and specialized OOD detection tools on one side, and general-purpose auditing frameworks on the other side by providing a unified, framework-agnostic abstraction layer specifically for misclassification detection.
+
 
 # Software Design
 
-`Safetycage` is built around three abstract base classes that enforce a modular structure:
+`Safetycage` is built around three abstract base classes that enforce a modular, framework-agnostic structure through composition. \autoref{fig:architecture}
 
-- **`SafetyCage`** — the base class for detection methods. Subclasses implement `train_cage()` to learn detection parameters and `predict()` to compute per-sample scores. Common functionality such as threshold optimization (`find_best_threshold_flag()`), binary flagging (`flag()`), and serialization (`save_cage()`, `load_cage()`) is provided by the base class.
-- **`DataModule`** — defines how data is loaded, transformed, and split into training and validation partitions via `_load_data()`, `_transform()`, and `_split()`.
-- **`ModelModule`** — exposes the classifier's outputs through `_get_predictions()`, `_get_activations()`, and `_get_pre_activations()`, allowing detection methods to access the information they need without depending on a specific ML framework.
+
+![Caption text.\label{fig:architecture}](figure.png)
+
+
+**`DataModule`** defines how data is loaded, transformed, and partitioned. Subclasses implement `_load_data()` to ingest data from any source, `_transform()` to apply preprocessing, and `_split()` to divide data into training and validation sets. The module also exposes dataset properties such as `num_classes` and `classes`, which are consumed by the detection methods.
+
+**`ModelModule`** wraps the user's trained classifier behind a uniform interface. Subclasses implement `_get_predictions()` to obtain class outputs and `_get_activations()` to extract intermediate layer representations. Because the interface depends only on NumPy arrays, any model — whether built with scikit-learn, PyTorch, TensorFlow, or another framework — can be integrated by implementing these methods.
+
+**`SafetyCage`** is the base class for detection methods. It composes a `ModelModule` and a `DataModule`, and delegates framework-specific concerns to them. Subclasses implement `train_cage()` to learn detection parameters from calibration data and `predict()` to compute per-sample scores indicating misclassification risk. The base class provides shared functionality: `flag()` applies a decision threshold to the scores, `find_best_threshold()` selects the optimal threshold by maximizing a user-chosen metric, and `save_cage()` / `load_cage()` handle serialization of trained parameters.
 
 This design allows any combination of detection method, model, and dataset to be composed freely. Users can compare multiple methods on the same data and model, or apply the same method across different models, with no code duplication.
 
 # Implemented Methods
 
-`Safetycage` currently implements four detection methods. Each computes a per-sample score; higher scores indicate greater misclassification risk. An optimal decision threshold is then selected on validation data by maximizing a user-chosen metric (default: Matthews Correlation Coefficient). For full mathematical details of each method, we refer to the original publications.
+`Safetycage` currently implements four detection methods. Each computes a per-sample score which indicates misclassification risk. An optimal decision threshold is selected on calibration data - disjont from data used to construct ML model - by maximizing a user-chosen metric. For full mathematical details of each method, we refer to the original publications.
 
-| Method | Approach | Reference |
-|--------|----------|-----------|
-| MSP | Thresholds on the maximum softmax probability of the classifier | @msp_placeholder |
-| DOCTOR | Estimates a rejection rule from the ratio of correct/incorrect class distributions | @doctor_placeholder |
-| Mahalanobis | Measures distance of layer activations from class-conditional Gaussian statistics | @mahalanobis_placeholder |
-| SPARDACUS | Projects activations to maximize separation between correct and incorrect distributions | @spardacus_placeholder |
+| Method | Approach |
+|--------|----------|
+| MSP [@HendrycksG16c] | Thresholds on the maximum softmax probability of the classifier | 
+| DOCTOR [@Granese21]| Estimates a rejection rule from the ratio of correct/incorrect class distributions | 
+| Mahalanobis [@pmlr-v233-johnsen24a] | Measures distance of layer activations from class-conditional Gaussian statistics | 
+| SPARDACUS [@johnsen2024spardacus]| Projects activations to maximize separation between correct and incorrect distributions | 
 
 # Examples of Use
 
