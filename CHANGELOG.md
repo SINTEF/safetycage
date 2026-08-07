@@ -1,5 +1,34 @@
 # Changelog
 
+## v0.0.56 (07/08/2026)
+
+> Versions 0.0.6 through 0.0.55 were published without changelog entries.
+> This entry covers everything that changed since v0.0.5.
+
+### Breaking
+
+- Removed the module-level `safetycage.utils.evaluate.find_best_threshold()`.
+  Use the `SafetyCage.find_best_threshold()` method instead. Note the method
+  takes no `leq` argument — it reads `self.leq` via `self.flag()` — so callers
+  passing `leq=` explicitly need to drop it.
+- `SafetyCage.save_cage()` / `.load_cage()` now use a single joblib file rather
+  than the previous multi-file format, and `load_cage()` is a classmethod.
+  Cages saved by earlier versions need to be re-fitted and saved again.
+
+### Feature
+
+- Added the RED method (`safetycage.methods.red`). It needs `gpytorch` and
+  `torch`, available through the `red` extra: `pip install safetycage[red]`.
+- Added `examples/`, starting with a worked MNIST example in
+  `examples/01-mnist`: a PyTorch MLP wrapped in a `DataModule` and
+  `ModelModule` and guarded by MSP. Notebook and example tooling live in a
+  PEP 735 `examples` dependency group, so none of it reaches the published
+  wheel.
+
+### Fix
+
+- Corrected type annotations on `DataModule` and `ModelModule`.
+
 ## v0.0.5 (24/04/2026)
 
 ### Fix
