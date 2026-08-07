@@ -492,4 +492,11 @@ $RECYCLE.BIN/
 
 # End of https://www.toptal.com/developers/gitignore/api/macos,windows,linux,visualstudiocode,pycharm,python,jupyternotebooks,images,data,venv,virtualenv
 
+### safetycage examples ###
+# Datasets downloaded by each example's DataModule (63 MB for MNIST alone).
+examples/*/data/
+
+# Model checkpoints written by each example's train.py.
+examples/*/*.pt
+
 examples/use_case/notebooks/cifar10/saved_cage/parameters.joblib
