@@ -1,0 +1,26 @@
+# Read the Docs build configuration.
+# https://docs.readthedocs.io/en/stable/config-file/v2.html
+
+version: 2
+
+build:
+  os: ubuntu-24.04
+  tools:
+    # pyproject.toml pins requires-python to ==3.11.7, so RTD's generic
+    # "3.11" would fail to install the package. uv fetches the exact patch.
+    python: "3.11"
+  jobs:
+    install:
+      - asdf plugin add uv
+      - asdf install uv latest
+      - asdf global uv latest
+      - uv python install 3.11.7
+    build:
+      html:
+        # Sphinx lives in the PEP 735 `docs` dependency group, which Read the
+        # Docs does not install on its own. -W matches CI, so a malformed
+        # docstring fails here too rather than publishing degraded pages.
+        - uv run --group docs sphinx-build -W -b html docs $READTHEDOCS_OUTPUT/html
+
+sphinx:
+  configuration: docs/conf.py

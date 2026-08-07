@@ -1,8 +1,8 @@
-# Documentation build and GitLab Pages deployment.
+# Documentation build check.
 #
-# GitLab Pages requires a job literally named `pages` whose artifacts land in
-# a top-level `public/` directory. Sphinx builds into docs/_build/html, so the
-# job moves the result into place afterwards.
+# The docs are published by Read the Docs, which builds from the GitHub
+# mirror. This pipeline only verifies that the build still succeeds, so a
+# broken docstring fails review rather than reaching Read the Docs.
 
 image: python:3.11.7-slim
 
@@ -17,27 +17,6 @@ cache:
   paths:
     - .uv-cache
 
-pages:
-  stage: deploy
-
-  before_script:
-    - pip install --quiet uv
-
-  script:
-    # -W turns warnings into errors, so a malformed docstring fails the build
-    # here rather than silently degrading the published page.
-    - uv run --group docs sphinx-build -W -b html docs public
-
-  artifacts:
-    paths:
-      - public
-
-  rules:
-    # Pages only publishes from the default branch.
-    - if: $CI_COMMIT_BRANCH == $CI_DEFAULT_BRANCH
-
-# Build the docs on merge requests too, so breakage is caught before it
-# reaches the default branch. Same command, no artifact, nothing published.
 docs:check:
   stage: test
 
@@ -45,7 +24,10 @@ docs:check:
     - pip install --quiet uv
 
   script:
+    # -W turns warnings into errors, matching the Read the Docs build, so a
+    # malformed docstring fails here rather than degrading the published page.
     - uv run --group docs sphinx-build -W -b html docs docs/_build/html
 
   rules:
     - if: $CI_PIPELINE_SOURCE == "merge_request_event"
+    - if: $CI_COMMIT_BRANCH == $CI_DEFAULT_BRANCH
