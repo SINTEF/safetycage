@@ -1,0 +1,50 @@
+name: docs
+
+on:
+  push:
+    branches: [main]
+  # Lets you redeploy from the Actions tab without a new commit.
+  workflow_dispatch:
+
+# Allow one concurrent deployment; a newer push supersedes an in-flight one.
+concurrency:
+  group: pages
+  cancel-in-progress: true
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: astral-sh/setup-uv@v5
+        with:
+          enable-cache: true
+
+      # pyproject pins requires-python to ==3.11.7, so uv must fetch that
+      # exact patch release rather than whatever 3.11.x the runner ships.
+      - run: uv python install 3.11.7
+
+      # -W turns warnings into errors, so a malformed docstring fails the
+      # build here rather than silently degrading the published page.
+      - run: uv run --group docs sphinx-build -W -b html docs docs/_build/html
+
+      - uses: actions/upload-pages-artifact@v3
+        with:
+          path: docs/_build/html
+
+  deploy:
+    needs: build
+    runs-on: ubuntu-latest
+
+    permissions:
+      pages: write
+      id-token: write
+
+    environment:
+      name: github-pages
+      url: ${{ steps.deployment.outputs.page_url }}
+
+    steps:
+      - id: deployment
+        uses: actions/deploy-pages@v4

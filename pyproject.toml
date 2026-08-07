@@ -42,6 +42,11 @@ examples = [
     "jupyter>=1.1",
     "nbformat>=5.10",
 ]
+docs = [
+    "sphinx>=7.3",
+    "furo>=2024.1",
+    "myst-parser>=3.0",
+]
 
 [project.urls]
 Homepage = "https://github.com/safety-cage/safetycage"

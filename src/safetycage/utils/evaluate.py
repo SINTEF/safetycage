@@ -84,7 +84,7 @@ def calculate_auroc(safetycage:SafetyCage, y_true: np.ndarray, y_scores: np.ndar
     computes the AUROC using the trapezoidal rule.
 
     Args:
-    safetycage (SafetyCage): Safety cage used to flag samples.
+        safetycage (SafetyCage): Safety cage used to flag samples.
         y_true (np.ndarray): True binary labels (incorrect predictions).
         y_scores (np.ndarray): Statistics/scores from the classifier.
         

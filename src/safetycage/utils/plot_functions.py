@@ -71,8 +71,8 @@ def annotate_text_box(
       - "auto":   choose based on y location
     
     Improvements to Make:
-      - FIX: currently, the only function that calls this is plot_alpha_metric_curve, which currently 
-      has test metrics labels go upward, and val downward.
+      - FIX: currently, the only function that calls this is plot_alpha_metric_curve, which currently
+        has test metrics labels go upward, and val downward.
       - Test for all cases, it's a bit weirdly hardcoded where it works for most cases we'll see, but not all possible cases.
     """
 
