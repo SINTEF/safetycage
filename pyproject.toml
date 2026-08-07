@@ -49,10 +49,10 @@ docs = [
 ]
 
 [project.urls]
-Homepage = "https://github.com/SINTEF/safetycage"
-Issues = "https://github.com/SINTEF/safetycage/issues"
-Changelog = "https://github.com/SINTEF/safetycage/blob/main/CHANGELOG.md"
-Documentation = "https://safetycage-pypi-1186c4.pages.sintef.no/"
+Homepage = "https://github.com/joelbjervig/safetycage"
+Issues = "https://github.com/joelbjervig/safetycage/issues"
+Changelog = "https://github.com/joelbjervig/safetycage/blob/main/CHANGELOG.md"
+Documentation = "https://joelbjervig.github.io/safetycage/"
 
 [tool.uv]
 package = true
