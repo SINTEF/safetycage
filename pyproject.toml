@@ -4,7 +4,7 @@ build-backend = "uv_build"
 
 [project]
 name = "safetycage"
-version = "0.0.54"
+version = "0.0.56"
 authors = [
     { name="Pål Vegard Bun Johnsen", email="pal.johnsen@sintef.no" },
     { name="Joel Bjervig", email="Joel.Bjervig@sintef.no" },
@@ -32,9 +32,21 @@ dependencies = [
 [project.optional-dependencies]
 red = ["gpytorch>=1.9", "torch>=1.13"]
 
+[dependency-groups]
+# Local-only tooling for examples/. A PEP 735 group rather than an extra, so
+# none of this reaches the published wheel's metadata.
+examples = [
+    "torch>=1.13",
+    "torchvision>=0.15",
+    "ipykernel>=7",
+    "jupyter>=1.1",
+    "nbformat>=5.10",
+]
+
 [project.urls]
 Homepage = "https://github.com/safety-cage/safetycage"
 Issues = "https://github.com/safety-cage/safetycage/issues"
+Changelog = "https://github.com/safety-cage/safetycage/blob/main/CHANGELOG.md"
 
 [tool.uv]
 package = true
