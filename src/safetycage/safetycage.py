@@ -191,7 +191,7 @@ class SafetyCage(ABC):
             "metrics": metrics,
         }
 
-    def roc_curve(self, y_true: np.ndarray, statistics: np.ndarray) -> dict:
+    def roc_curve(self, y_true: np.ndarray, y_pred: np.ndarray) -> dict:
         """
         Compute the ROC curve by sweeping self.flag() across every threshold.
 
@@ -206,7 +206,7 @@ class SafetyCage(ABC):
 
         Args:
             y_true (numpy.ndarray): Ground-truth misclassification labels
-            statistics (numpy.ndarray): Computed statistics or probabilities
+            y_pred (numpy.ndarray): Computed statistics or probabilities
 
         Returns:
             dict: Dictionary containing
@@ -215,16 +215,16 @@ class SafetyCage(ABC):
                 - thresholds (numpy.ndarray): Threshold values used
         """
 
-        statistics = np.asarray(statistics, dtype=float)
+        y_pred = np.asarray(y_pred, dtype=float)
 
-        finite = np.unique(statistics[np.isfinite(statistics)])
+        finite = np.unique(y_pred[np.isfinite(y_pred)])
         thresholds = np.concatenate(([-np.inf], finite, [np.inf]))
 
         tpr_values = []
         fpr_values = []
 
         for threshold in thresholds:
-            flags = self.flag(statistics, threshold)
+            flags = self.flag(y_pred, threshold)
             confusion_rates = calculate_confusion_rates(y=y_true, y_pred=flags)
 
             tpr_values.append(recall(**confusion_rates))
@@ -236,19 +236,19 @@ class SafetyCage(ABC):
             "thresholds": thresholds,
         }
 
-    def auroc(self, y_true: np.ndarray, statistics: np.ndarray) -> float:
+    def auroc(self, y_true: np.ndarray, y_pred: np.ndarray) -> float:
         """
         Compute the area under the ROC curve produced by self.roc_curve().
 
         Args:
             y_true (numpy.ndarray): Ground-truth misclassification labels
-            statistics (numpy.ndarray): Computed statistics or probabilities
+            y_pred (numpy.ndarray): Computed statistics or probabilities
 
         Returns:
             float: The area under the ROC curve
         """
 
-        curve = self.roc_curve(y_true=y_true, statistics=statistics)
+        curve = self.roc_curve(y_true, y_pred)
 
         # Integrate left to right: the sweep visits thresholds in either
         # direction depending on how the method flags, and np.trapezoid needs a
