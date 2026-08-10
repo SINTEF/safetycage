@@ -5,6 +5,7 @@ import joblib
 from pathlib import Path
 from safetycage.modelmodule import ModelModule
 from safetycage.datamodule import DataModule
+from safetycage.utils.metrics import calculate_confusion_rates, recall, specificity
 class SafetyCage(ABC):
     """
     Abstract base class for safety cage methods.
@@ -159,15 +160,10 @@ class SafetyCage(ABC):
         Returns:
             dict: Dictionary containing the optimal threshold and the corresponding best metric value
         """
-        if greater_is_better:
-            compare = lambda x, y: x > y
-            best_metric = -np.inf 
-        else:
-            compare = lambda x, y: x < y
-            best_metric = np.inf 
 
-        best_alpha = -np.inf
-        for t in np.linspace(min(y_probs), max(y_probs), num=1000):
+        thresholds = np.linspace(min(y_probs), max(y_probs), num=1000)
+        metrics = []
+        for t in thresholds:
 
             flag = self.flag(y_probs, t)
 
@@ -182,16 +178,88 @@ class SafetyCage(ABC):
             tns = total_neg - fps
             
             metric = metric_fn(TP=tps, TN=tns, FP=fps, FN=fns)
-            
-            if compare(metric, best_metric):
-                best_metric = metric
-                best_alpha = t
-                
+            metrics.append(metric)
+
+        optimal_metric_index = np.argmax(metrics) if greater_is_better else np.argmin(metrics)
+        best_alpha = thresholds[optimal_metric_index]
+        best_metric = metrics[optimal_metric_index]
+        
         return {
             "alpha_opt": best_alpha,
             "metric_max": best_metric,
+            "thresholds": thresholds,
+            "metrics": metrics,
         }
-    
+
+    def roc_curve(self, y_true: np.ndarray, statistics: np.ndarray) -> dict:
+        """
+        Compute the ROC curve by sweeping self.flag() across every threshold.
+
+        Going through self.flag() means this works whichever direction a method
+        flags in, and for methods that override flag() entirely.
+
+        Thresholds are the unique finite statistics, padded with -inf and +inf so
+        the curve reaches both (0, 0) and (1, 1) either way round. NaN statistics
+        stay in the data — they simply never compare true — but are not used as
+        thresholds, since a comparison against NaN is always False and would add
+        a spurious "nothing flagged" point.
+
+        Args:
+            y_true (numpy.ndarray): Ground-truth misclassification labels
+            statistics (numpy.ndarray): Computed statistics or probabilities
+
+        Returns:
+            dict: Dictionary containing
+                - fpr (numpy.ndarray): False positive rates
+                - tpr (numpy.ndarray): True positive rates
+                - thresholds (numpy.ndarray): Threshold values used
+        """
+
+        statistics = np.asarray(statistics, dtype=float)
+
+        finite = np.unique(statistics[np.isfinite(statistics)])
+        thresholds = np.concatenate(([-np.inf], finite, [np.inf]))
+
+        tpr_values = []
+        fpr_values = []
+
+        for threshold in thresholds:
+            flags = self.flag(statistics, threshold)
+            confusion_rates = calculate_confusion_rates(y=y_true, y_pred=flags)
+
+            tpr_values.append(recall(**confusion_rates))
+            fpr_values.append(1.0 - specificity(**confusion_rates))
+
+        return {
+            "fpr": np.array(fpr_values),
+            "tpr": np.array(tpr_values),
+            "thresholds": thresholds,
+        }
+
+    def auroc(self, y_true: np.ndarray, statistics: np.ndarray) -> float:
+        """
+        Compute the area under the ROC curve produced by self.roc_curve().
+
+        Args:
+            y_true (numpy.ndarray): Ground-truth misclassification labels
+            statistics (numpy.ndarray): Computed statistics or probabilities
+
+        Returns:
+            float: The area under the ROC curve
+        """
+
+        curve = self.roc_curve(y_true=y_true, statistics=statistics)
+
+        # Integrate left to right: the sweep visits thresholds in either
+        # direction depending on how the method flags, and np.trapezoid needs a
+        # monotone x. Break ties by TPR so a vertical run ends on the top of the
+        # step — ordering it arbitrarily makes the trapezoid cut the corner and
+        # understates the area.
+        order = np.lexsort((curve["tpr"], curve["fpr"]))
+        auc_value = np.trapezoid(y=curve["tpr"][order], x=curve["fpr"][order])
+
+        return float(auc_value)
+
     def save_cage(self, path):
         """Save trained cage parameters to a joblib file.
 
