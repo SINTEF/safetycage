@@ -1,6 +1,6 @@
 # Changelog
 
-## v0.0.57 (10/08/2026)
+## v0.0.58 (10/08/2026)
 
 ### Breaking
 
@@ -41,16 +41,8 @@
   floors in exchange; `numpy` and `scikit-learn` stay pinned for now, since the
   methods are sensitive to both.
 
-### Feature
-
-- Documentation is now published at <https://safetycage.readthedocs.io/> and
-  linked from the PyPI project page.
-
 ### Fix
 
-- Project URLs now point at <https://github.com/SINTEF/safetycage>. Releases up
-  to v0.0.56 linked to the `safety-cage` account, which no longer hosts the
-  repository, so the Homepage and Issues links on PyPI were dead.
 - SPARDACUS no longer raises `AttributeError` on any dataset with an unreliable
   class. It assigned `np.NaN` to those p-values, and numpy 2 removed that
   spelling — it is `np.nan`.
@@ -66,6 +58,19 @@
 - `plot_statistic_distribution` drops NaN statistics. SPARDACUS emits NaN for
   samples it cannot score, and matplotlib rejects a histogram whose range is
   not finite, so the old code raised on real SPARDACUS output.
+
+## v0.0.57 (10/08/2026)
+
+### Feature
+
+- Documentation is now published at <https://safetycage.readthedocs.io/> and
+  linked from the PyPI project page.
+
+### Fix
+
+- Project URLs now point at <https://github.com/SINTEF/safetycage>. Releases up
+  to v0.0.56 linked to the `safety-cage` account, which no longer hosts the
+  repository, so the Homepage and Issues links on PyPI were dead.
 
 ## v0.0.56 (07/08/2026)
 
