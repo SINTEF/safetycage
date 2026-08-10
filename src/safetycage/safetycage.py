@@ -12,9 +12,9 @@ class SafetyCage(ABC):
 
     A safety cage detects misclassification in classification tasks. Safety cage methods
     evaluate predictive models by computing statistics that indicate whether a sample is 
-    likely to be misclassified and comparing to some optimal threshold statistic, called "alpha". 
+    likely to be misclassified and comparing to some optimal threshold. 
     Concrete base classes define how these statistics are computed, how predictions are 
-    evaluated, and how to find the optimal alpha value.
+    evaluated, and how to find the optimal threshold.
 
     Subclasses must implement training, prediction, and the method to compute the statistic.
     Implementations on how to flag misclassifications, find the best threshold, and save/load the 
@@ -26,10 +26,10 @@ class SafetyCage(ABC):
         data_module: Reference to data module object for handling data.
         num_classes (int): Number of classes. Retrieved from the data module.
         selected_classes (list): List of classes. Retrieved from the data module.
-        alpha (float): Threshold statistic value used for flagging misclassifications.
+        threshold (float): Threshold statistic value used for flagging misclassifications.
         layer_params (dict, optional): Dictionary to store parameters for specific layers, if needed by 
             safety cage.
-        leq (bool, optional): If True, samples with statistic less than or equal to alpha are flagged as 
+        leq (bool, optional): If True, samples with statistic less than or equal to the threshold are flagged as 
             misclassified. Only required if the default flag method is used.
     """
 
@@ -56,7 +56,7 @@ class SafetyCage(ABC):
         self.num_classes = data_module.num_classes
         self.selected_classes = data_module.classes
         
-        self.alpha = None
+        self.threshold = None
         
     #Train the parameters of the specified SafetyCage
     @abstractmethod
@@ -105,13 +105,13 @@ class SafetyCage(ABC):
         pass
 
     #Flag predictions as being correct (0) or wrong (1)
-    def flag(self, statistics: float | np.ndarray, alpha: float | None = None) -> float | np.ndarray:
+    def flag(self, statistics: float | np.ndarray, threshold: float | None = None) -> float | np.ndarray:
         """
-        Flag samples with probability less than or equal (safetycage.leq = True) to alpha as incorrect
-        or probability more than or equal (safetycage.leq = False) to alpha as incorrect.
+        Flag samples with probability less than or equal (safetycage.leq = True) to threshold as incorrect
+        or probability more than or equal (safetycage.leq = False) to threshold as incorrect.
         
         This method identifies samples where the maximum/minimum probability is below/above a
-        specified threshold (alpha), marking them as potentially incorrect classifications.
+        specified threshold (threshold), marking them as potentially incorrect classifications.
 
         If some statistics are np.NaN values (as a result of unreliable_classes), the corresponding flag
         will be set to np.NaN as well.
@@ -120,27 +120,27 @@ class SafetyCage(ABC):
 
         Args:
             statistics (numpy.ndarray): Array of probability values to evaluate
-            alpha (float): Threshold value for flagging samples (0 to 1)
+            threshold (float): Threshold value for flagging samples (0 to 1)
         Returns:
-            numpy.ndarray: Boolean array where True indicates probabilities below/above the alpha threshold
+            numpy.ndarray: Boolean array where True indicates probabilities below/above the threshold
                 depending on safetycage.leq. There are NaN values given for when the statistic is NaN.
         """
         if self.leq is None:
             raise ValueError("safetycage.leq is not defined. Define safetycage.leq to use the default flag method.")
 
-        # Check priority of alpha parameter
-        if alpha is None:
-            # If not provided as input, try to use self.alpha
-            if hasattr(self, 'alpha') and self.alpha is not None:
-                alpha = self.alpha
+        # Check priority of threshold parameter
+        if threshold is None:
+            # If not provided as input, try to use self.threshold
+            if hasattr(self, 'threshold') and self.threshold is not None:
+                threshold = self.threshold
             else:
                 # If neither source is available, raise an error
-                raise ValueError("Missing alpha parameter: must be provided as input or set as class attribute")
-        
+                raise ValueError("Missing threshold parameter: must be provided as input or set as class attribute")
+
         if self.leq:
-            flags = statistics <= alpha
+            flags = statistics <= threshold
         elif not self.leq and self.leq is not None:
-            flags = statistics >= alpha
+            flags = statistics >= threshold
 
         return flags
 
@@ -181,11 +181,11 @@ class SafetyCage(ABC):
             metrics.append(metric)
 
         optimal_metric_index = np.argmax(metrics) if greater_is_better else np.argmin(metrics)
-        best_alpha = thresholds[optimal_metric_index]
+        best_threshold = thresholds[optimal_metric_index]
         best_metric = metrics[optimal_metric_index]
         
         return {
-            "alpha_opt": best_alpha,
+            "threshold_opt": best_threshold,
             "metric_max": best_metric,
             "thresholds": thresholds,
             "metrics": metrics,
@@ -269,10 +269,10 @@ class SafetyCage(ABC):
         Raises:
             ValueError: If the cage has not been trained (alpha not set).
         """
-        if getattr(self, "alpha", None) is None:
-            raise ValueError("Cannot save: cage has not been trained (alpha is not set).")
+        if getattr(self, "threshold", None) is None:
+            raise ValueError("Cannot save: cage has not been trained (threshold is not set).")
 
-        parameters = {"alpha": self.alpha}
+        parameters = {"threshold": self.threshold}
 
         if getattr(self, "layer_params", None) is not None:
             parameters["layer_params"] = self.layer_params
@@ -303,7 +303,7 @@ class SafetyCage(ABC):
         parameters = joblib.load(path)
 
         instance = cls(model_module=model_module, data_module=data_module)
-        instance.alpha = parameters["alpha"]
+        instance.threshold = parameters["threshold"]
 
         if "layer_params" in parameters:
             instance.layer_params = parameters["layer_params"]
