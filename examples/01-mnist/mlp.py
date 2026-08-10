@@ -35,7 +35,6 @@ class MLP(nn.Module):
                 ("softmax", nn.Softmax(dim=1)),
             ]
         )
-
         self.mlp = nn.Sequential(layers)
 
     def forward(self, x: torch.Tensor) -> torch.Tensor:
