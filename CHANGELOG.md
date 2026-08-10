@@ -1,5 +1,21 @@
 # Changelog
 
+## v0.0.57 (10/08/2026)
+
+No code changes — this release exists to correct the package metadata, which
+PyPI freezes per release and cannot be edited after upload.
+
+### Feature
+
+- Documentation is now published at <https://safetycage.readthedocs.io/> and
+  linked from the PyPI project page.
+
+### Fix
+
+- Project URLs now point at <https://github.com/SINTEF/safetycage>. Releases up
+  to v0.0.56 linked to the `safety-cage` account, which no longer hosts the
+  repository, so the Homepage and Issues links on PyPI were dead.
+
 ## v0.0.56 (07/08/2026)
 
 > Versions 0.0.6 through 0.0.55 were published without changelog entries.

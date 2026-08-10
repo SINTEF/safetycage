@@ -4,7 +4,7 @@ build-backend = "uv_build"
 
 [project]
 name = "safetycage"
-version = "0.0.56"
+version = "0.0.57"
 authors = [
     { name="Pål Vegard Bun Johnsen", email="pal.johnsen@sintef.no" },
     { name="Joel Bjervig", email="Joel.Bjervig@sintef.no" },
