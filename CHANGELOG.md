@@ -1,5 +1,18 @@
 # Changelog
 
+## Unreleased
+
+### Feature
+
+- The MNIST tutorial notebook is now rendered on the documentation site
+  under "Examples", not just linked to on GitHub.
+
+### Fix
+
+- `SafetyCage.roc_curve()` and `SafetyCage.auroc()` renamed their second
+  parameter from `statistics` to `y_pred`, matching the rest of the metrics
+  API.
+
 ## v0.0.58 (10/08/2026)
 
 ### Breaking
