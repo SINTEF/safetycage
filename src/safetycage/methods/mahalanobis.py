@@ -2,10 +2,8 @@ import os
 import joblib
 import numpy as np
 from numpy import linalg
-from scipy.stats import chi2, norm, f, combine_pvalues
+from scipy.stats import cauchy, chi2, norm, f, combine_pvalues
 from statsmodels.distributions.empirical_distribution import ECDF
-
-from ..utils.functions_library import CauchyCombinationTest
 
 from ..safetycage import SafetyCage
 
@@ -352,7 +350,7 @@ class Mahalanobis(SafetyCage):
         
         if test_type == 'cauchy':
             return np.array([
-                CauchyCombinationTest(
+                self.CauchyCombinationTest(
                     p_values = pvalues[i, :],
                     weights = self.cauchy_weights_per_layer
                     )
@@ -474,6 +472,36 @@ class Mahalanobis(SafetyCage):
             )
         
         return upper_tail_prob + lower_tail_prob
+
+    @staticmethod
+    def CauchyCombinationTest(p_values, weights=None):
+        """
+        Combine p-values using the Cauchy combination test.
+
+        This method combines multiple p-values into a single global p-value.
+        If no weights are provided, all p-values are given equal weight.
+
+        Args:
+            p_values (numpy.ndarray): P-values to combine.
+            weights (numpy.ndarray, optional): Weights for each p-value. (default: None).
+
+        Returns:
+            float: Combined p-value.
+        """
+
+        # If weights is None, put equal weight to each p-value:
+        if weights is None or weights == []:
+            weights = np.ones(len(p_values))/len(p_values)
+
+        # Compute Cauchy statistic:
+        C = np.sum(weights*np.tan((0.5-p_values)*np.pi))
+
+        # If p-value are uniformly distributed, C has a standard Cauchy distribution
+        # Small p-values indicate discrepancies from H_0, which will give large C.
+        # Compute one-sided right-tailed p-value:
+        p_value_combined_cauchy = 1 - cauchy.cdf(C, loc=0, scale=1)
+
+        return(p_value_combined_cauchy)
 
 if __name__ == "__main__":
     Mahalanobis(None, None, None)
