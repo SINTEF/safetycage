@@ -1,8 +1,5 @@
 import numpy as np
-import json
-import os
-
-from ..safetycage import SafetyCage
+from safetycage.safetycage import SafetyCage
 
 class MSP(SafetyCage):
     """

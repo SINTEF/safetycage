@@ -1,11 +1,9 @@
-import os
-import joblib
 import numpy as np
 from numpy import linalg
 from scipy.stats import cauchy, chi2, norm, f, combine_pvalues
 from statsmodels.distributions.empirical_distribution import ECDF
 
-from ..safetycage import SafetyCage
+from safetycage.safetycage import SafetyCage
 
 class Mahalanobis(SafetyCage):
     """

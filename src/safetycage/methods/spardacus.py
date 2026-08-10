@@ -6,7 +6,7 @@ from sklearn.model_selection import GridSearchCV
 from statsmodels.distributions.empirical_distribution import ECDF
 import warnings
 
-from ..safetycage import SafetyCage
+from safetycage.safetycage import SafetyCage
 
 class SPARDACUS(SafetyCage):
     """

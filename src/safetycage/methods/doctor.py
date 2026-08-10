@@ -1,8 +1,5 @@
-import os
-import json
 import numpy as np
-
-from ..safetycage import SafetyCage
+from safetycage.safetycage import SafetyCage
 
 class DOCTOR(SafetyCage):
     """

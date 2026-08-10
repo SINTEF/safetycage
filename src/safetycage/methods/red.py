@@ -1,7 +1,5 @@
 import numpy as np
-import warnings
-
-from ..safetycage import SafetyCage
+from safetycage.safetycage import SafetyCage
 
 try:
     import torch
