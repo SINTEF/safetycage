@@ -1,14 +1,20 @@
 name: docs
 
+# Read the Docs publishes the documentation; this workflow only verifies that
+# the build still succeeds. It runs on pull requests so a malformed docstring
+# fails review rather than reaching Read the Docs, and on main as a backstop
+# for pushes that bypassed review.
 on:
+  pull_request:
+    branches: [main]
   push:
     branches: [main]
-  # Lets you redeploy from the Actions tab without a new commit.
+  # Lets you re-run the check from the Actions tab without a new commit.
   workflow_dispatch:
 
-# Allow one concurrent deployment; a newer push supersedes an in-flight one.
+# One check per ref is enough; a newer push supersedes an in-flight one.
 concurrency:
-  group: pages
+  group: docs-${{ github.ref }}
   cancel-in-progress: true
 
 jobs:
@@ -25,26 +31,8 @@ jobs:
       # exact patch release rather than whatever 3.11.x the runner ships.
       - run: uv python install 3.11.7
 
-      # -W turns warnings into errors, so a malformed docstring fails the
-      # build here rather than silently degrading the published page.
+      # -W turns warnings into errors. Read the Docs deliberately builds
+      # without it, so that a third-party intersphinx outage degrades some
+      # cross-links rather than blocking publication; catching the warnings
+      # it lets through is the whole point of this job.
       - run: uv run --group docs sphinx-build -W -b html docs docs/_build/html
-
-      - uses: actions/upload-pages-artifact@v3
-        with:
-          path: docs/_build/html
-
-  deploy:
-    needs: build
-    runs-on: ubuntu-latest
-
-    permissions:
-      pages: write
-      id-token: write
-
-    environment:
-      name: github-pages
-      url: ${{ steps.deployment.outputs.page_url }}
-
-    steps:
-      - id: deployment
-        uses: actions/deploy-pages@v4

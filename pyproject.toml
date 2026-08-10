@@ -52,7 +52,10 @@ docs = [
 Homepage = "https://github.com/joelbjervig/safetycage"
 Issues = "https://github.com/joelbjervig/safetycage/issues"
 Changelog = "https://github.com/joelbjervig/safetycage/blob/main/CHANGELOG.md"
-Documentation = "https://joelbjervig.github.io/safetycage/"
+# Documentation is published by Read the Docs. Its URL carries no owner name,
+# so it survives the repository moving between accounts or organisations —
+# which matters because PyPI metadata is immutable once a release is cut.
+Documentation = "https://safetycage.readthedocs.io/"
 
 [tool.uv]
 package = true

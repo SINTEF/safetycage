@@ -19,11 +19,11 @@ build:
         # Sphinx lives in the PEP 735 `docs` dependency group, which Read the
         # Docs does not install on its own.
         #
-        # No -W here, unlike the GitLab docs:check job. Content errors are
-        # already caught there before merge; on Read the Docs the only extra
-        # thing -W would catch is intersphinx failing to reach numpy.org or
-        # scikit-learn.org, which would block publishing over a third-party
-        # outage that at worst degrades some cross-links.
+        # No -W here, unlike the `docs` GitHub Actions workflow. Content
+        # errors are already caught there before merge; on Read the Docs the
+        # only extra thing -W would catch is intersphinx failing to reach
+        # numpy.org or scikit-learn.org, which would block publishing over a
+        # third-party outage that at worst degrades some cross-links.
         - uv run --group docs sphinx-build -b html docs $READTHEDOCS_OUTPUT/html
 
 sphinx:
