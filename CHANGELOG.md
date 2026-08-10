@@ -2,8 +2,44 @@
 
 ## v0.0.57 (10/08/2026)
 
-No code changes — this release exists to correct the package metadata, which
-PyPI freezes per release and cannot be edited after upload.
+### Breaking
+
+- Removed `safetycage.utils.evaluate`. Its contents split by what they need:
+  - The seven metric functions, `calculate_confusion_rates` and
+    `calculate_metrics` moved to `safetycage.utils.metrics`, which works on
+    labels alone. Importing them from `evaluate` used to work by accident —
+    they were re-exported — so import from `safetycage.utils.metrics` instead.
+  - `AUROC` and `calculate_roc_curve` became `SafetyCage.auroc()` and
+    `SafetyCage.roc_curve()`. A threshold sweep has to know which direction a
+    method flags in, which is cage state, so it belongs on the cage. Both now
+    call `self.flag()`, which means they follow a subclass that overrides
+    `flag()` — SPARDACUS, for one — with nothing extra to configure.
+  - `calculate_roc_curve` also lost its unused `num_thresholds`,
+    `threshold_min` and `threshold_max` arguments. The sweep visits the unique
+    statistics, so there is nothing left to tune.
+- `calculate_metrics` no longer takes a `metric_functions` argument. It always
+  reports the registry, now named `METRIC_FUNCTIONS` (was `metric_functions`).
+  To compute one metric, or one outside the registry, apply it to the confusion
+  counts directly: `MCC(**calculate_confusion_rates(y, y_pred))`.
+- Removed `safetycage.utils.functions_library`. Its contents moved onto the
+  method classes as static methods, under the same names:
+  - `CauchyCombinationTest` → `SPARDACUS.CauchyCombinationTest` *and*
+    `Mahalanobis.CauchyCombinationTest`. Both methods used it, so each class
+    now carries its own copy.
+  - `fastSPARDA`, `l1SPARDA`, `randomProjectionSearch`,
+    `projectedWasserstein`, `gmm_bic_score` → `SPARDACUS`.
+- Removed `safetycage.utils.plot_functions`, replaced by
+  `safetycage.utils.visualise`. `plot_confusion_matrix`, `plot_roc_curve` and
+  `annotate_text_box` are gone — use scikit-learn's `ConfusionMatrixDisplay`
+  and `RocCurveDisplay` instead. `plot_alpha_metric_curve` is now
+  `plot_metric_vs_threshold`, which takes one series rather than a hardcoded
+  validation/test pair, accepts an `ax` and returns it, and no longer saves or
+  closes figures. Overlay by passing the same `ax` twice. The statistic
+  histogram it used to draw on a twin axis is now `plot_statistic_distribution`.
+- `requires-python` is now `>=3.13`, up from an exact `==3.11.7` pin. The
+  package no longer installs on 3.11 or 3.12. Most dependencies relaxed to
+  floors in exchange; `numpy` and `scikit-learn` stay pinned for now, since the
+  methods are sensitive to both.
 
 ### Feature
 
@@ -15,6 +51,21 @@ PyPI freezes per release and cannot be edited after upload.
 - Project URLs now point at <https://github.com/SINTEF/safetycage>. Releases up
   to v0.0.56 linked to the `safety-cage` account, which no longer hosts the
   repository, so the Homepage and Issues links on PyPI were dead.
+- SPARDACUS no longer raises `AttributeError` on any dataset with an unreliable
+  class. It assigned `np.NaN` to those p-values, and numpy 2 removed that
+  spelling — it is `np.nan`.
+- `AUROC` no longer raises either. It called `np.trapz`, also removed in
+  numpy 2, and now uses `np.trapezoid`. Its integration additionally broke ties
+  by FPR alone, which cut the corner off every vertical step and understated
+  the area. `SafetyCage.auroc()` now matches `sklearn.metrics.roc_auc_score`
+  exactly.
+- The ROC sweep pads its thresholds with ±inf, so the curve reaches both (0, 0)
+  and (1, 1) whichever direction the cage flags in, and no longer uses NaN
+  statistics as thresholds. A comparison against NaN is always False, which
+  added a spurious "nothing flagged" point.
+- `plot_statistic_distribution` drops NaN statistics. SPARDACUS emits NaN for
+  samples it cannot score, and matplotlib rejects a histogram whose range is
+  not finite, so the old code raised on real SPARDACUS output.
 
 ## v0.0.56 (07/08/2026)
 

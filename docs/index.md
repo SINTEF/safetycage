@@ -39,7 +39,7 @@ method then consumes them:
 
 ```python
 from safetycage.methods.msp import MSP
-from safetycage.utils.evaluate import MCC
+from safetycage.utils.metrics import MCC
 
 msp = MSP(model_module=model_module, data_module=data_module)
 msp.train_cage()
@@ -70,7 +70,7 @@ class probabilities.
 
 ## Worked examples
 
-The [`examples/`](https://github.com/safety-cage/safetycage/tree/main/examples)
+The [`examples/`](https://github.com/SINTEF/safetycage/tree/main/examples)
 directory contains complete integrations. `examples/01-mnist` wraps a PyTorch
 MLP and guards it with MSP, including a runnable notebook.
 

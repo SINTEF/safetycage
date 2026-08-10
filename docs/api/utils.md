@@ -1,27 +1,22 @@
 # Utilities
 
-## Evaluation
+## Metrics
 
-Metrics and threshold helpers.
+Confusion counts and classification metrics, computed from labels alone at a
+single, fixed threshold.
 
 ```{note}
-`SafetyCage.find_best_threshold()` is a *method* on the cage object and takes
-no `leq` argument — it reads `self.leq` via `self.flag()`. The module-level
-function of the same name was removed in 0.0.56.
+Threshold *sweeps* live on the cage, not here: see `SafetyCage.roc_curve()` and
+`SafetyCage.auroc()` under [Core](core.md). They need to know which direction a
+method flags in, which is cage state.
 ```
 
 ```{eval-rst}
-.. automodule:: safetycage.utils.evaluate
+.. automodule:: safetycage.utils.metrics
 ```
 
 ## Plotting
 
 ```{eval-rst}
-.. automodule:: safetycage.utils.plot_functions
-```
-
-## Function library
-
-```{eval-rst}
-.. automodule:: safetycage.utils.functions_library
+.. automodule:: safetycage.utils.visualise
 ```
