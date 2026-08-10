@@ -28,8 +28,12 @@ extensions = [
     "sphinx.ext.napoleon",  # reads the Google-style docstrings used throughout
     "sphinx.ext.viewcode",
     "sphinx.ext.intersphinx",
-    "myst_parser",  # lets pages be written in Markdown rather than reST
+    "myst_nb",  # Markdown pages (superset of myst_parser) plus rendered notebooks
 ]
+
+# The MNIST tutorial notebook is already committed with its outputs; re-running
+# it here would need torch/torchvision in the docs build for no benefit.
+nb_execution_mode = "off"
 
 exclude_patterns = [
     "_build",

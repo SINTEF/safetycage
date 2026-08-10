@@ -12,6 +12,11 @@ than trusted.
 ```bash
 pip install safetycage
 ```
+Or using uv
+
+```bash
+uv add safetycage
+```
 
 The RED method additionally needs `torch` and `gpytorch`:
 
@@ -19,11 +24,7 @@ The RED method additionally needs `torch` and `gpytorch`:
 pip install safetycage[red]
 ```
 
-```{warning}
-safetycage currently declares `requires-python = "==3.11.7"`, an exact pin.
-Installation will fail on any other Python version, including 3.11.6 and
-3.11.9.
-```
+The SPARDACUS and mahalanobis method needs `statsmodels` and `scikit-learn`
 
 ## How it works
 
@@ -72,7 +73,14 @@ class probabilities.
 
 The [`examples/`](https://github.com/SINTEF/safetycage/tree/main/examples)
 directory contains complete integrations. `examples/01-mnist` wraps a PyTorch
-MLP and guards it with MSP, including a runnable notebook.
+MLP and guards it with MSP, including a runnable notebook, rendered below.
+
+```{toctree}
+:maxdepth: 1
+:caption: Examples
+
+examples/mnist
+```
 
 ```{toctree}
 :maxdepth: 2
