@@ -7,8 +7,16 @@ def test_add_one_basic():
     assert 1+1 == 2
 
 def test_check_package_version():
+    """The installed version must match the version declared in pyproject.toml."""
+    import tomllib
     from importlib.metadata import version
-    assert version('safetycage') == '0.0.2'
+    from pathlib import Path
+
+    pyproject = Path(__file__).resolve().parents[1] / "pyproject.toml"
+    with pyproject.open("rb") as fh:
+        declared = tomllib.load(fh)["project"]["version"]
+
+    assert version("safetycage") == declared
 
 def main():
     test_add_one_basic()
