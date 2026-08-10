@@ -503,3 +503,5 @@ examples/*/data/
 examples/*/*.pt
 
 examples/use_case/notebooks/cifar10/saved_cage/parameters.joblib
+# Claude Code worktrees — local scratch, never part of the project
+.claude/worktrees/
