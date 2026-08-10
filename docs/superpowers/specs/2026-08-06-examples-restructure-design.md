@@ -1,28 +1,31 @@
 # Examples restructure: migrate tutorials into `examples/` and port to PyTorch
 
 Date: 2026-08-06
-Status: Approved, not yet implemented
+Status: Partly superseded — see the amendment below
 
-## Amendment, 2026-08-06: iris replaced by digits
+## Amendment, 2026-08-10: the zero-dependency lead example was dropped
 
-This spec names **iris** as the zero-dependency lead example. During
-implementation planning that choice was measured and found unworkable, and the
-plan uses `sklearn.datasets.load_digits` instead.
+This spec opens with **iris** as a zero-dependency lead example, ahead of mnist
+and cifar10. That lead example no longer exists in any form, and the plan that
+would have built it has been deleted.
 
-iris has 150 samples, which yields a 24-sample validation split containing
-**one** misclassification. Threshold selection would optimise a metric computed
-from a single positive — the example could not demonstrate the thing it exists
-to demonstrate. wine (178 samples) is worse, at zero validation errors.
+The reasoning is recorded here because the measurements are worth keeping. iris
+has 150 samples, yielding a 24-sample validation split with **one**
+misclassification, so threshold selection would optimise a metric computed from
+a single positive — it could not demonstrate the thing it existed to
+demonstrate. wine (178 samples) is worse, at zero validation errors. digits was
+adopted instead: 1797 samples, 10 classes, and a 288-sample validation split
+with 33 errors under a depth-capped RandomForest.
 
-digits has 1797 samples, 10 classes, and a 288-sample validation split with 33
-errors under a depth-capped RandomForest. It ships inside scikit-learn exactly
-as iris does, so the zero-dependency property this spec relies on is preserved.
-It is also 8×8 handwritten digits, which makes it a progression into the mnist
-example rather than a jump.
+digits was then dropped too. `examples/01-mnist/` was built directly and covers
+the same ground with a real neural network, making a scikit-learn warm-up
+redundant.
 
-Everything else in this spec stands. Read "iris" below as "digits"; the
-structure, dependency strategy, path helper and testing approach are unchanged.
-See `docs/superpowers/plans/2026-08-06-examples-foundation-digits.md`.
+**What still stands:** the layout convention, the split between `modules.py`,
+`train.py` and the notebook, the dependency-group strategy, `examples/utils.py`,
+and the testing approach. **What does not:** the `iris/` → `mnist/` → `cifar10/`
+progression below, and the flat directory names — the actual convention is
+numbered (`01-mnist/`). Read the layout section with that substitution.
 
 ## Problem
 
