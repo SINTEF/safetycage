@@ -27,15 +27,32 @@ Automating "which layers, what counts as pre-activation vs activation" is
 architecture-specific (see `examples/01-mnist/mlp_modelmodule.py`'s
 `LAYER_BLOCKS`) and needs its own design once this phase lands.
 
+**Also in scope: removing `_calc_model_shape`.** It is `@abstractmethod` on
+`ModelModule` but unused by every safety cage method and by any code in the
+package — the only implementation, in
+`examples/01-mnist/mlp_modelmodule.py`, exists solely because the ABC forces
+it (its own docstring: "Nothing here uses it, but ModelModule declares it
+abstract"). Since `TorchModelModule`/`SklearnModelModule` would otherwise
+need a pointless stub for it, this is the right moment to delete it instead:
+
+- Remove `_calc_model_shape` from `src/safetycage/modelmodule.py`.
+- Remove its implementation from
+  `examples/01-mnist/mlp_modelmodule.py`.
+- Remove `_calc_model_shape` from the `private-members` list in
+  `docs/conf.py`.
+
 **Considered and rejected for this phase:**
+
 - TensorFlow/Keras support — de-prioritized as rarely used by the target
   users today. Can be added later following the same pattern as
   `TorchModelModule` if that changes.
 - A generic `FunctionModelModule(fn)` wrapper around a bare callable — too
   little boilerplate saved over just subclassing `ModelModule` directly (the
   documented fallback) to justify a new public class.
-- `DataModule` automation — out of scope; data loading/splitting is
-  inherently project-specific and not addressed here.
+
+**Deferred, not rejected: `DataModule` automation.** An analogous
+`AutoDataModule`/framework-specific `DataModule`s is a reasonable idea, but a
+separate discussion with its own design — not addressed in this spec.
 
 ## Architecture
 
@@ -57,7 +74,6 @@ three new classes ultimately produce a `ModelModule` instance.
 ```python
 TorchModelModule(
     model: torch.nn.Module,
-    use_onehot_encoder: bool = False,
     device: str = "cpu",
     output_is_probabilities: bool = False,
 )
@@ -67,12 +83,17 @@ TorchModelModule(
   `model(x)` under `torch.no_grad()`, applies `softmax(dim=-1)` unless
   `output_is_probabilities=True` (torch models conventionally end in a
   `Linear` layer and output logits, not probabilities).
-- `_get_predictions(x)`: `argmax` of `_get_probabilities(x)`; returns one-hot
-  rows when `use_onehot_encoder=True`, matching the base class convention
-  already used by `MLPModelModule` in the MNIST example.
-- `_get_activations`, `_get_pre_activations`, `_calc_model_shape`: raise
-  `NotImplementedError` with a message pointing to `docs/how-it-works.md` and
-  the MNIST example for methods that need hidden-layer access.
+- `_get_predictions(x)`: `argmax` of `_get_probabilities(x)`, always as
+  integer class indices. No `use_onehot_encoder` option: it exists on the
+  base class only so predictions can be compared elementwise against labels
+  from a `DataModule`, and mismatched one-hot settings between the two
+  modules fail silently rather than erroring. Since this phase doesn't touch
+  `DataModule`, a one-hot-label `DataModule` needs a hand-written
+  `ModelModule` (matches the pattern `MLPModelModule` uses in the MNIST
+  example) rather than being supported here.
+- `_get_activations`, `_get_pre_activations`: raise `NotImplementedError` with
+  a message pointing to `docs/how-it-works.md` and the MNIST example for
+  methods that need hidden-layer access.
 - Import guarded the same way `methods/red.py` guards `torch`/`gpytorch`:
   ```python
   try:
@@ -88,12 +109,13 @@ TorchModelModule(
 ## SklearnModelModule
 
 ```python
-SklearnModelModule(model, use_onehot_encoder: bool = False)
+SklearnModelModule(model)
 ```
 
 - Purely duck-typed — does **not** import `sklearn`. Works with any object
   implementing the sklearn convention: scikit-learn, XGBoost, LightGBM,
   CatBoost classifiers all qualify for free.
+- No `use_onehot_encoder` option, for the same reason as `TorchModelModule`.
 - `_get_predictions(x)` → `model.predict(x)`.
 - `_get_probabilities(x)` → `model.predict_proba(x)`. If the model lacks
   `predict_proba` (e.g. an `SVC` without `probability=True`), raise
@@ -149,8 +171,7 @@ mahalanobis = ["statsmodels>=0.14.6", "scipy"]
 
 - `TorchModelModule`: a tiny `nn.Sequential` (e.g. `Linear(4, 3)`), checking
   predictions and probabilities against a manual softmax computation; a case
-  covering `output_is_probabilities=True`; a case covering
-  `use_onehot_encoder=True`.
+  covering `output_is_probabilities=True`.
 - `SklearnModelModule`: `sklearn.linear_model.LogisticRegression` fit on a toy
   dataset; a case where `predict_proba` is absent, asserting the
   `AttributeError`.
