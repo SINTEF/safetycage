@@ -72,34 +72,49 @@ At minimum, a `ModelModule` implements `_get_predictions`. MSP and DOCTOR
 also need `_get_probabilities`; SPARDACUS, Mahalanobis and RED need
 `_get_activations`/`_get_pre_activations` from a network's hidden layers, so
 they only work with models that expose intermediate layers (see the MNIST
-example). A model that only exposes a `predict_proba`-style output, such as
-a scikit-learn classifier, is enough for MSP or DOCTOR:
+example). For the common case of a scikit-learn-style classifier or a plain
+PyTorch model, safetycage ships ready-made `ModelModule`s — see the next
+section. Write a custom one only when your model doesn't fit either shape,
+or you need SPARDACUS/Mahalanobis/RED's hidden-layer access.
+
+## Common models: TorchModelModule, SklearnModelModule, AutoModelModule
+
+For MSP or DOCTOR, a plain scikit-learn-style classifier needs no adapter
+code at all:
 
 ```python
-from safetycage.modelmodule import ModelModule
+from safetycage.modelmodules.sklearn_modelmodule import SklearnModelModule
 
-
-class SklearnModelModule(ModelModule):
-    """Wraps any scikit-learn-style classifier with `predict_proba`."""
-
-    def __init__(self, model, **kwargs):
-        super().__init__(selected_layers=[], use_onehot_encoder=False, model=model, **kwargs)
-
-    def _get_predictions(self, x):
-        return self.model.predict(x)
-
-    def _get_probabilities(self, x):
-        return self.model.predict_proba(x)
-
-    def _get_activations(self, x):
-        raise NotImplementedError("This model exposes no intermediate layers.")
-
-    def _get_pre_activations(self, x):
-        raise NotImplementedError("This model exposes no intermediate layers.")
-
-    def _calc_model_shape(self):
-        return {}
+model_module = SklearnModelModule(model)  # model has .predict / .predict_proba
 ```
+
+Works with any object following the same convention — XGBoost, LightGBM and
+CatBoost classifiers included.
+
+The equivalent for a plain PyTorch model:
+
+```python
+from safetycage.modelmodules.torch_modelmodule import TorchModelModule
+
+model_module = TorchModelModule(model, device="cpu")
+```
+
+Requires the `torch` extra (`pip install safetycage[torch]`). Assumes
+`model` outputs raw logits (the usual convention of ending in a `Linear`
+layer) and applies softmax internally; pass `output_is_probabilities=True`
+if your model already ends in softmax/sigmoid.
+
+{py:class}`~safetycage.modelmodules.auto_modelmodule.AutoModelModule` picks
+between the two for you:
+
+```python
+from safetycage.modelmodules.auto_modelmodule import AutoModelModule
+
+model_module = AutoModelModule(model)  # torch.nn.Module or a .predict-style object
+```
+
+None of these three expose hidden-layer activations — SPARDACUS, Mahalanobis
+and RED still need a hand-written `ModelModule` (see the MNIST example).
 
 ## Running a safety cage method
 
