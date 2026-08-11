@@ -2301,6 +2301,9 @@ spardacus = [
     { name = "statsmodels" },
     { name = "tqdm" },
 ]
+torch = [
+    { name = "torch" },
+]
 
 [package.dev-dependencies]
 docs = [
@@ -2328,9 +2331,10 @@ requires-dist = [
     { name = "statsmodels", marker = "extra == 'mahalanobis'", specifier = ">=0.14.6" },
     { name = "statsmodels", marker = "extra == 'spardacus'", specifier = ">=0.14.6" },
     { name = "torch", marker = "extra == 'red'", specifier = ">=1.13" },
+    { name = "torch", marker = "extra == 'torch'", specifier = ">=1.13" },
     { name = "tqdm", marker = "extra == 'spardacus'" },
 ]
-provides-extras = ["red", "spardacus", "mahalanobis"]
+provides-extras = ["red", "torch", "spardacus", "mahalanobis"]
 
 [package.metadata.requires-dev]
 docs = [
