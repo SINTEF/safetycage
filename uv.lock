@@ -2278,7 +2278,7 @@ wheels = [
 
 [[package]]
 name = "safetycage"
-version = "0.0.60"
+version = "0.0.61"
 source = { editable = "." }
 dependencies = [
     { name = "joblib" },

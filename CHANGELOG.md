@@ -1,6 +1,6 @@
 # Changelog
 
-## v0.0.60 (11/08/2026)
+## v0.0.61 (11/08/2026)
 
 ### Feature
 
@@ -17,6 +17,8 @@
   model and dispatches to whichever of the two applies. All three support
   MSP and DOCTOR only — none of them expose hidden-layer activations, so
   SPARDACUS, Mahalanobis and RED still need a hand-written `ModelModule`.
+- Added a project logo, shown in the documentation site's sidebar
+  (`docs/_static/logo-2.png`, wired up via `html_logo` in `docs/conf.py`).
 
 ### Fix
 

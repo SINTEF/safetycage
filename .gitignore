@@ -53,6 +53,7 @@
 
 # Portable Network Graphics
 *.png
+!docs/_static/*.png
 
 # Animated Portable Network Graphics
 *.apng

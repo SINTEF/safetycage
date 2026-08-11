@@ -72,3 +72,5 @@ intersphinx_mapping = {
 
 html_theme = "furo"
 html_title = f"safetycage {release}"
+html_static_path = ["_static"]
+html_logo = "_static/logo-2.png"

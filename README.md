@@ -1,4 +1,6 @@
-# SafetyCage
+<p align="center">
+  <img src="docs/_static/logo-2.png" height="300" alt="Project Logo">
+</p>
 
 SafetyCage is a Python package for **detecting misclassified predictions** from machine learning models in classification tasks. It provides a unified interface for multiple statistical detection methods, enabling users to quantify prediction reliability and flag potentially incorrect outputs across different models and datasets easily.
 
@@ -6,7 +8,7 @@ It is available on PyPI here: https://pypi.org/project/safetycage/.
 
 ## Background
 
-The idea behind safetycage is that we can find statistics on each predicted sample and compare that statistic to some statistic threshold “alpha” to predict whether the sample prediction was incorrectly classified.
+The idea behind safetycage is that we can find statistics on each predicted sample and compare that statistic to some statistic threshold to predict whether the sample prediction was incorrectly classified.
 
 ## Description
 Machine learning models can produce incorrect predictions with high confidence. SafetyCage addresses this by providing post-hoc misclassification detection methods that operate on model outputs or internal representations.
