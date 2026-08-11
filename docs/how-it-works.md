@@ -102,7 +102,10 @@ model_module = TorchModelModule(model, device="cpu")
 Requires the `torch` extra (`pip install safetycage[torch]`). Assumes
 `model` outputs raw logits (the usual convention of ending in a `Linear`
 layer) and applies softmax internally; pass `output_is_probabilities=True`
-if your model already ends in softmax/sigmoid.
+if your model already ends in softmax/sigmoid. Constructing
+`TorchModelModule` moves `model` to `device` and switches it to eval mode in
+place, not on a copy, so pass in a copy if you need the original to stay on
+its device or in train mode.
 
 {py:class}`~safetycage.modelmodules.auto_modelmodule.AutoModelModule` picks
 between the two for you:
@@ -112,6 +115,11 @@ from safetycage.modelmodules.auto_modelmodule import AutoModelModule
 
 model_module = AutoModelModule(model)  # torch.nn.Module or a .predict-style object
 ```
+
+Any `**kwargs` `AutoModelModule` receives that the dispatched class's
+constructor doesn't recognize are silently absorbed with no effect — e.g.
+passing `device=` for a model that dispatches to `SklearnModelModule` does
+nothing, no error.
 
 None of these three expose hidden-layer activations — SPARDACUS, Mahalanobis
 and RED still need a hand-written `ModelModule` (see the MNIST example).

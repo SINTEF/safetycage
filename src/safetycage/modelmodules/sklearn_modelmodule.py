@@ -4,7 +4,7 @@ Duck-typed — does not import scikit-learn itself, so this also covers
 XGBoost, LightGBM and CatBoost classifiers, which follow the same
 convention.
 """
-from typing import Any
+from typing import Any, List
 
 import numpy as np
 
@@ -35,14 +35,14 @@ class SklearnModelModule(ModelModule):
             )
         return self.model.predict_proba(x)
 
-    def _get_activations(self, x: np.ndarray):
+    def _get_activations(self, x: np.ndarray) -> List[np.ndarray]:
         raise NotImplementedError(
             "SklearnModelModule exposes no intermediate layers. SPARDACUS, "
             "Mahalanobis and RED need hidden-layer activations - write a "
             "custom ModelModule (see docs/how-it-works.md)."
         )
 
-    def _get_pre_activations(self, x: np.ndarray):
+    def _get_pre_activations(self, x: np.ndarray) -> List[np.ndarray]:
         raise NotImplementedError(
             "SklearnModelModule exposes no intermediate layers. SPARDACUS, "
             "Mahalanobis and RED need hidden-layer pre-activations - write "

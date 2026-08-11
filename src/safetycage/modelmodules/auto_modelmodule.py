@@ -12,8 +12,13 @@ if HAS_TORCH:
 class AutoModelModule:
     """Factory that dispatches to TorchModelModule or SklearnModelModule.
 
-    AutoModelModule(model, **kwargs) returns a ModelModule instance
+    AutoModelModule(model, ``**kwargs``) returns a ModelModule instance
     directly; AutoModelModule is never itself instantiated.
+
+    Any ``**kwargs`` not recognized by the dispatched class's constructor
+    are silently absorbed by ``ModelModule.__init__``'s own ``**kwargs`` and
+    have no effect — e.g. passing ``device=`` when the model dispatches to
+    ``SklearnModelModule`` does nothing, no error.
     """
 
     def __new__(cls, model: Any, **kwargs: Any) -> ModelModule:

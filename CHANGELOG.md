@@ -6,12 +6,34 @@
 
 - The MNIST tutorial notebook is now rendered on the documentation site
   under "Examples", not just linked to on GitHub.
+- Three new `ModelModule` implementations for models that don't need
+  hand-written adapters: `safetycage.modelmodules.sklearn_modelmodule.SklearnModelModule`
+  wraps any classifier with `.predict`/`.predict_proba` (scikit-learn,
+  XGBoost, LightGBM, CatBoost and friends);
+  `safetycage.modelmodules.torch_modelmodule.TorchModelModule` wraps a plain
+  `torch.nn.Module` and requires the new `torch` extra
+  (`pip install safetycage[torch]`);
+  `safetycage.modelmodules.auto_modelmodule.AutoModelModule` inspects the
+  model and dispatches to whichever of the two applies. All three support
+  MSP and DOCTOR only — none of them expose hidden-layer activations, so
+  SPARDACUS, Mahalanobis and RED still need a hand-written `ModelModule`.
 
 ### Fix
 
 - `SafetyCage.roc_curve()` and `SafetyCage.auroc()` renamed their second
   parameter from `statistics` to `y_pred`, matching the rest of the metrics
   API.
+
+### Breaking
+
+- `tqdm` moved out of the package's core dependencies into the `spardacus`
+  extra, since only SPARDACUS uses it. Anyone relying on `tqdm` being
+  installed transitively via plain `pip install safetycage` now needs
+  `pip install safetycage[spardacus]` or their own `tqdm` dependency.
+- `scikit-learn` dropped from the `mahalanobis` extra — Mahalanobis never
+  imported it. Anyone relying on `scikit-learn` being installed transitively
+  via `pip install safetycage[mahalanobis]` now needs
+  `pip install safetycage[spardacus]` or their own `scikit-learn` dependency.
 
 ## v0.0.58 (10/08/2026)
 

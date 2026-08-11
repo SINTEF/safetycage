@@ -34,11 +34,12 @@ pip install safetycage
 Some methods need extra dependencies, installed via `pip install
 safetycage[extra]` (or `uv add "safetycage[extra]"`):
 
-| Extra | Method | Adds |
+| Extra | Uses | Adds |
 | --- | --- | --- |
 | `red` | {py:class}`~safetycage.methods.red.RED` | `torch`, `gpytorch` |
 | `spardacus` | {py:class}`~safetycage.methods.spardacus.SPARDACUS` | `statsmodels`, `scikit-learn`, `scipy`, `tqdm` |
 | `mahalanobis` | {py:class}`~safetycage.methods.mahalanobis.Mahalanobis` | `statsmodels`, `scipy` |
+| `torch` | {py:class}`~safetycage.modelmodules.torch_modelmodule.TorchModelModule` | `torch` |
 
 ## How it works
 

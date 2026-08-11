@@ -3,7 +3,7 @@
 Requires the lightweight `torch` extra (pip install safetycage[torch]), not
 the heavier `red` extra (torch + gpytorch).
 """
-from typing import Any
+from typing import Any, List
 
 import numpy as np
 
@@ -29,6 +29,20 @@ class TorchModelModule(ModelModule):
     hidden-layer activations, which this class does not provide — write a
     custom ModelModule for those (see docs/how-it-works.md and
     examples/01-mnist/mlp_modelmodule.py).
+
+    Construction moves ``model`` to ``device`` and switches it to eval mode
+    in place — it is not copied — so a caller who needs the model to stay on
+    its current device, or to remain in train mode afterward, should pass in
+    a copy instead.
+
+    ``_get_predictions``'s ``np.argmax(..., axis=1)`` assumes a multi-class
+    output (2+ classes); a binary model with a single sigmoid logit of shape
+    ``(N, 1)`` is not supported and will silently produce all-zero
+    predictions.
+
+    Input arrays are cast to ``float32`` in ``_to_tensor`` regardless of the
+    model's actual dtype — a double-precision model will raise a dtype
+    mismatch from torch.
     """
 
     def __init__(
@@ -62,14 +76,14 @@ class TorchModelModule(ModelModule):
     def _get_predictions(self, x: np.ndarray) -> np.ndarray:
         return np.argmax(self._get_probabilities(x), axis=1)
 
-    def _get_activations(self, x: np.ndarray):
+    def _get_activations(self, x: np.ndarray) -> List[np.ndarray]:
         raise NotImplementedError(
             "TorchModelModule exposes no intermediate layers. SPARDACUS, "
             "Mahalanobis and RED need hidden-layer activations - write a "
             "custom ModelModule (see docs/how-it-works.md)."
         )
 
-    def _get_pre_activations(self, x: np.ndarray):
+    def _get_pre_activations(self, x: np.ndarray) -> List[np.ndarray]:
         raise NotImplementedError(
             "TorchModelModule exposes no intermediate layers. SPARDACUS, "
             "Mahalanobis and RED need hidden-layer pre-activations - write "

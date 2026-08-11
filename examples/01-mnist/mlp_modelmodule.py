@@ -173,4 +173,3 @@ class MLPModelModule(ModelModule):
         captured = self._forward_capture(x, list(wanted.values()))
 
         return {block: captured[name] for block, name in wanted.items()}
-
