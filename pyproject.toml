@@ -4,7 +4,7 @@ build-backend = "uv_build"
 
 [project]
 name = "safetycage"
-version = "0.0.58"
+version = "0.0.59"
 authors = [
     { name="Pål Vegard Bun Johnsen", email="pal.johnsen@sintef.no" },
     { name="Joel Bjervig", email="Joel.Bjervig@sintef.no" },
@@ -24,13 +24,12 @@ dependencies = [
     "joblib",
     "matplotlib",
     "numpy==2.5.2",
-    "tqdm",
 ]
 
 [project.optional-dependencies]
 red = ["gpytorch>=1.9", "torch>=1.13"]
-spardacus = ["statsmodels>=0.14.6", "scikit-learn==1.9.0", "scipy"]
-mahalanobis = ["statsmodels>=0.14.6", "scikit-learn==1.9.0", "scipy"]
+spardacus = ["statsmodels>=0.14.6", "scikit-learn==1.9.0", "scipy", "tqdm"]
+mahalanobis = ["statsmodels>=0.14.6", "scipy"]
 
 [dependency-groups]
 # Local-only tooling for examples/. A PEP 735 group rather than an extra, so

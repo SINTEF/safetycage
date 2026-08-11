@@ -1,60 +1,51 @@
 # safetycage
+Predictive models, especially neural networks, are increasingly deployed in
+real-world and safety-critical settings. A well-documented failure mode is
+that they fail silently: a model can be highly confident about a prediction
+and still be wrong, and that confidence does not reliably drop just because
+the input differs from what the model was trained on. Measuring accuracy once
+on a held-out set says nothing about whether any single prediction made after
+deployment can be trusted.
 
-Misclassification detection for predictive models.
+**Misclassification detection** addresses this at the level of individual
+predictions. Given a model's output on a new input, a misclassification
+detector estimates whether that specific prediction is likely correct or
+likely wrong, without access to the true label, since none is available at
+deployment time. This is a different problem from out-of-distribution (OOD)
+detection: an input can be entirely in-distribution and still be
+misclassified, and in safety-critical applications catching that case is
+often what matters most. Predictions flagged as untrustworthy can then be
+routed to a human reviewer, which is exactly the kind of error-resilience and
+human-oversight support called for by regulation such as the EU AI Act.
 
-A classifier that is wrong and *knows* it is wrong is far more useful than one
-that is wrong confidently. safetycage wraps a trained model and flags the
-predictions it is likely to have got wrong, so they can be reviewed rather
-than trusted.
+safetycage collects several misclassification detection methods behind a
+common interface: softmax-based baselines (MSP, DOCTOR), statistical tests
+over hidden-layer activations (SPARDACUS, Mahalanobis), and an
+uncertainty-aware residual model (RED). Swapping between them only requires
+implementing the two adapter classes described below.
 
 ## Installation
 
 ```bash
 pip install safetycage
-```
-Or using uv
-
-```bash
-uv add safetycage
+# or: uv add safetycage
 ```
 
-The RED method additionally needs `torch` and `gpytorch`:
+Some methods need extra dependencies, installed via `pip install
+safetycage[extra]` (or `uv add "safetycage[extra]"`):
 
-```bash
-pip install safetycage[red]
-```
-
-The SPARDACUS and mahalanobis method needs `statsmodels` and `scikit-learn`
+| Extra | Method | Adds |
+| --- | --- | --- |
+| `red` | {py:class}`~safetycage.methods.red.RED` | `torch`, `gpytorch` |
+| `spardacus` | {py:class}`~safetycage.methods.spardacus.SPARDACUS` | `statsmodels`, `scikit-learn`, `scipy`, `tqdm` |
+| `mahalanobis` | {py:class}`~safetycage.methods.mahalanobis.Mahalanobis` | `statsmodels`, `scipy` |
 
 ## How it works
 
-Adopting safetycage means writing two adapter classes for your own project:
-
-- {py:class}`~safetycage.datamodule.DataModule` — declares how your data is
-  loaded, transformed and split, and what the classes are.
-- {py:class}`~safetycage.modelmodule.ModelModule` — declares how to get
-  predictions, probabilities and intermediate activations out of your model.
-
-Everything safetycage needs, it gets through those two objects. A safety cage
-method then consumes them:
-
-```python
-from safetycage.methods.msp import MSP
-from safetycage.utils.metrics import MCC
-
-msp = MSP(model_module=model_module, data_module=data_module)
-msp.train_cage()
-
-# Confidence statistic per sample; low means "likely wrong".
-statistics = msp.predict(x_val, y_val)
-
-# Pick a threshold on validation data...
-incorrect = (model_module._get_predictions(x_val) != y_val).astype(int)
-result = msp.find_best_threshold(y_true=incorrect, y_probs=statistics, metric_fn=MCC)
-
-# ...then apply it to held-out data.
-flagged = msp.flag(msp.predict(x_test, y_test), result["alpha_opt"])
-```
+Adopting safetycage means writing two adapter classes for your own project: a
+{py:class}`~safetycage.datamodule.DataModule` and a
+{py:class}`~safetycage.modelmodule.ModelModule`. See [How it works](how-it-works)
+for the minimal shape of each and a worked-through safety cage method run.
 
 ## Choosing a method
 
@@ -86,6 +77,7 @@ examples/mnist
 :maxdepth: 2
 :caption: Contents
 
+how-it-works
 api/index
 ```
 
