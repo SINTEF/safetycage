@@ -41,9 +41,12 @@ exclude_patterns = [
     "superpowers/**",
 ]
 
-# RED needs torch and gpytorch, which live behind the optional `red` extra.
-# Mocking them keeps the docs buildable without installing the extra.
-autodoc_mock_imports = ["torch", "gpytorch"]
+# RED needs torch and gpytorch (behind the `red` extra); SPARDACUS needs
+# sklearn/scipy/statsmodels/tqdm and Mahalanobis needs scipy/statsmodels
+# (behind the `spardacus`/`mahalanobis` extras). Mocking all of them keeps
+# the docs buildable without installing any extra — Read the Docs only
+# installs the `docs` dependency group.
+autodoc_mock_imports = ["torch", "gpytorch", "sklearn", "scipy", "statsmodels", "tqdm"]
 
 autodoc_default_options = {
     "members": True,

@@ -1,6 +1,6 @@
 # Changelog
 
-## v0.0.59 (11/08/2026)
+## v0.0.6 (11/08/2026)
 
 ### Feature
 
@@ -23,6 +23,13 @@
 - `SafetyCage.roc_curve()` and `SafetyCage.auroc()` renamed their second
   parameter from `statistics` to `y_pred`, matching the rest of the metrics
   API.
+- SPARDACUS and Mahalanobis's API reference pages were silently empty on
+  the published docs site: Read the Docs only installs the `docs`
+  dependency group, so autodoc's import of `safetycage.methods.spardacus`
+  (needs `sklearn`/`scipy`/`statsmodels`/`tqdm`) and `.mahalanobis` (needs
+  `scipy`/`statsmodels`) failed and Sphinx skipped their content with only
+  a build-log warning. Added them to `autodoc_mock_imports` alongside the
+  existing `torch`/`gpytorch` mocks for RED.
 
 ### Breaking
 
