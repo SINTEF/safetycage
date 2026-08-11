@@ -52,7 +52,7 @@ autodoc_default_options = {
     # The methods safetycage actually calls on a ModelModule are underscore
     # -prefixed (_get_probabilities, _get_activations). They are part of the
     # integration contract, so they belong in the reference.
-    "private-members": "_get_predictions,_get_probabilities,_get_activations,_get_pre_activations,_calc_model_shape",
+    "private-members": "_get_predictions,_get_probabilities,_get_activations,_get_pre_activations",
 }
 autodoc_member_order = "bysource"
 

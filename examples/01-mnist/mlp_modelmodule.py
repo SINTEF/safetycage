@@ -174,11 +174,3 @@ class MLPModelModule(ModelModule):
 
         return {block: captured[name] for block, name in wanted.items()}
 
-    def _calc_model_shape(self) -> Dict[str, int]:
-        """Units per block. Nothing here uses it, but ``ModelModule`` declares
-        it abstract, so the class cannot be instantiated without it."""
-        return {
-            block: self._modules_by_name[LAYER_BLOCKS[block][0]].out_features
-            for block in self.AVAILABLE_LAYERS
-            if LAYER_BLOCKS[block][0] in self._modules_by_name
-        }

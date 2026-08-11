@@ -1,5 +1,5 @@
 from abc import ABC, abstractmethod
-from typing import Tuple, Union, List, Any, Dict
+from typing import Tuple, Union, List, Any
 import numpy as np
 
 class ModelModule(ABC):
@@ -68,15 +68,6 @@ class ModelModule(ABC):
         """Calculate pre-activation values for each layer given input x."""
         raise NotImplementedError("Implement based on your model architecture")
 
-
-    @abstractmethod
-    def _calc_model_shape(self) -> Dict[str,int]:
-        """
-        Get the shape of each layer in the model.
-        Returns: List of integers representing the number of neurons in each layer
-        """
-        raise NotImplementedError("Implement based on your model architecture")
-    
 if __name__ == '__main__':
     #Quick test to confirm it builds
     model_module = ModelModule()
