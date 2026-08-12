@@ -11,6 +11,7 @@ from safetycage.methods.msp import MSP
 :maxdepth: 2
 
 core
+datamodules
 methods
 modelmodules
 utils

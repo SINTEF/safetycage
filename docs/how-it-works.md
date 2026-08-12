@@ -15,56 +15,24 @@ PyTorch model, see the [MNIST example](examples/mnist).
 
 At minimum, a `DataModule` exposes the `classes` and `num_classes`
 properties, and populates `data_train`/`data_val`/`data_test` as `(x, y)`
-tuples of numpy arrays. If your data is already loaded and split, `setup`,
-`_load_data` and `_split` have nothing to do:
+tuples of numpy arrays: `train` fits the cage itself (used by
+RED/SPARDACUS/Mahalanobis; MSP/DOCTOR need no fitting), `val` estimates the
+optimal threshold, and `test` evaluates that threshold on held-out data.
+
+If your data is already loaded and split, safetycage ships a ready-made
+`DataModule` for exactly that:
 
 ```python
-import numpy as np
-from safetycage.datamodule import DataModule
+from safetycage.datamodules.array_datamodule import ArrayDataModule
 
-
-class ArrayDataModule(DataModule):
-    """Wraps data that is already loaded as train/val/test numpy arrays."""
-
-    def __init__(self, x_train, y_train, x_val, y_val, x_test, y_test, **kwargs):
-        super().__init__(data_dir=".", **kwargs)
-        self.data_train = (x_train, y_train)
-        self.data_val = (x_val, y_val)
-        self.data_test = (x_test, y_test)
-        self._classes = {c: str(c) for c in np.unique(y_train)}
-
-    @property
-    def num_classes(self):
-        return len(self._classes)
-
-    @property
-    def classes(self):
-        return self._classes
-
-    @property
-    def dataset_name(self):
-        return "custom"
-
-    def setup(self):
-        pass  # Splits are already provided in __init__.
-
-    def _load_data(self, filepath):
-        pass  # Not needed: data arrives pre-loaded.
-
-    def _transform(self, x, y):
-        return x, y
-
-    def _split(self, x, y, split):
-        pass  # Not needed: splits are already provided.
-
-    def to_joblib(self, path):
-        import joblib
-        joblib.dump(self, path)
-
-    def from_joblib(self, path):
-        import joblib
-        return joblib.load(path)
+data_module = ArrayDataModule(x_train, y_train, x_val, y_val, x_test, y_test)
 ```
+
+Accepts numpy arrays or pandas DataFrame/Series for any split — pandas
+input is normalized to numpy internally, so `data_train`/`data_val`/`data_test`
+are always numpy arrays regardless of what you passed in. Write a custom
+`DataModule` only if your data isn't already split, or needs its own
+loading/caching logic (see the MNIST example).
 
 ## The ModelModule
 
