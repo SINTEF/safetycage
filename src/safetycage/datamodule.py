@@ -1,5 +1,5 @@
 from abc import ABC, abstractmethod
-from typing import List, Any
+from typing import List, Any, Dict
 from pathlib import Path
 
 class DataModule(ABC):
@@ -55,8 +55,8 @@ class DataModule(ABC):
 
     @property
     @abstractmethod
-    def classes(self) -> List[Any]:
-        """Returns the class names in the dataset"""
+    def classes(self) -> Dict[Any, str]:
+        """Returns the class-index to class-name mapping"""
         raise NotImplementedError("Subclasses should implement this method to return the class names.")
 
 

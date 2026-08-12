@@ -1,5 +1,15 @@
 # Changelog
 
+## Unreleased
+
+### Feature
+
+- `safetycage.datamodules.array_datamodule.ArrayDataModule`: a ready-made
+  `DataModule` for train/val/test splits you already have in memory as
+  numpy arrays or pandas DataFrame/Series — no adapter code needed for the
+  common case of data that's already loaded and split. Accepts either
+  format for any split, normalizing pandas input to numpy internally.
+
 ## v0.0.61 (11/08/2026)
 
 ### Feature

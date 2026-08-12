@@ -70,6 +70,13 @@ def test_accepts_pandas_dataframe_and_series():
     np.testing.assert_array_equal(module.data_train[1], y_train)
 
 
+def test_mismatched_train_lengths_raises_value_error():
+    x_train, y_train, x_val, y_val, x_test, y_test = _synthetic_splits()
+
+    with pytest.raises(ValueError, match="train"):
+        ArrayDataModule(x_train, y_train[:5], x_val, y_val, x_test, y_test)
+
+
 def test_to_joblib_from_joblib_roundtrip():
     x_train, y_train, x_val, y_val, x_test, y_test = _synthetic_splits()
     module = ArrayDataModule(x_train, y_train, x_val, y_val, x_test, y_test)

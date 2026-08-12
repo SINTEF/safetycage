@@ -38,11 +38,24 @@ class ArrayDataModule(DataModule):
     ) -> None:
         super().__init__(data_dir=".", **kwargs)
 
-        y_train = _to_numpy(y_train)
-        self.data_train = (_to_numpy(x_train), y_train)
-        self.data_val = (_to_numpy(x_val), _to_numpy(y_val))
-        self.data_test = (_to_numpy(x_test), _to_numpy(y_test))
-        self._classes = {c: str(c) for c in np.unique(y_train)}
+        x_train_arr, y_train_arr = _to_numpy(x_train), _to_numpy(y_train)
+        x_val_arr, y_val_arr = _to_numpy(x_val), _to_numpy(y_val)
+        x_test_arr, y_test_arr = _to_numpy(x_test), _to_numpy(y_test)
+
+        for split_name, (x, y) in (
+            ("train", (x_train_arr, y_train_arr)),
+            ("val", (x_val_arr, y_val_arr)),
+            ("test", (x_test_arr, y_test_arr)),
+        ):
+            if len(x) != len(y):
+                raise ValueError(
+                    f"x_{split_name} has {len(x)} samples but y_{split_name} has {len(y)}"
+                )
+
+        self.data_train = (x_train_arr, y_train_arr)
+        self.data_val = (x_val_arr, y_val_arr)
+        self.data_test = (x_test_arr, y_test_arr)
+        self._classes = {c: str(c) for c in np.unique(y_train_arr)}
 
     @property
     def num_classes(self) -> int:
