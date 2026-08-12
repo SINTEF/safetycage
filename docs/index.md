@@ -1,4 +1,4 @@
-# safetycage
+# Safetycage
 Predictive models, especially neural networks, are increasingly deployed in
 real-world and safety-critical settings. A well-documented failure mode is
 that they fail silently: a model can be highly confident about a prediction
