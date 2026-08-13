@@ -1,3 +1,4 @@
+from re import search
 from typing import Optional
 from abc import ABC, abstractmethod
 import numpy as np
@@ -144,7 +145,7 @@ class SafetyCage(ABC):
 
         return flags
 
-    def find_best_threshold(self, y_true, y_probs, metric_fn, greater_is_better=True) -> float | np.ndarray:
+    def find_best_threshold(self, y_true, y_probs, metric_fn, greater_is_better=True, num_thresholds=1000, search="linear") -> float | np.ndarray:
         """
         Find the optimal threshold for flagging samples by calling self.flag().
 
@@ -160,8 +161,12 @@ class SafetyCage(ABC):
         Returns:
             dict: Dictionary containing the optimal threshold and the corresponding best metric value
         """
-
-        thresholds = np.linspace(min(y_probs), max(y_probs), num=1000)
+        if search == "linear":
+            thresholds = np.linspace(min(y_probs), max(y_probs), num=num_thresholds)
+        elif search == "log":
+            thresholds = np.logspace(np.log10(max(1e-8, min(y_probs))), np.log10(max(y_probs)), num=num_thresholds)
+        else:
+            raise ValueError(f"Invalid search method: {search}. Use 'linear' or 'log'.")
         metrics = []
         for t in thresholds:
 

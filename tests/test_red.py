@@ -53,6 +53,32 @@ class MockModelModule:
         return exp_logits / exp_logits.sum(axis=1, keepdims=True)
 
 
+class ImageMockModelModule:
+    """Stand-in for a ModelModule wrapping an image classifier.
+
+    x is (N, C, H, W), unlike MockModelModule's flat (N, D) tabular input.
+    _get_probabilities always returns a proper (N, num_classes) softmax
+    regardless of x's shape, matching a real forward pass -- it doesn't
+    slice x the way MockModelModule does, since x here isn't 2D.
+    """
+
+    def __init__(self, num_classes=3):
+        self.use_onehot_encoder = False
+        self.selected_layers = ["logits"]
+        self.last_layer = "logits"
+        self.model = None
+        self._num_classes = num_classes
+        self._rng = np.random.RandomState(0)
+
+    def _get_probabilities(self, x):
+        logits = self._rng.randn(len(x), self._num_classes).astype(np.float32)
+        exp_logits = np.exp(logits - logits.max(axis=1, keepdims=True))
+        return exp_logits / exp_logits.sum(axis=1, keepdims=True)
+
+    def _get_predictions(self, x):
+        return np.argmax(self._get_probabilities(x), axis=1)
+
+
 class MockDataModule:
     """Minimal stand-in for a DataModule."""
 
@@ -165,6 +191,53 @@ class TestREDTraining:
         red.train_cage(x=x, y=y, y_pred=y_pred)
 
         assert "gp_model" in red.layer_params
+
+    def test_train_populates_loss_history(self, trained_red):
+        """loss_history lets a caller plot the GP's loss curve after training."""
+        assert len(trained_red.loss_history) == trained_red.training_iterations
+        assert all(isinstance(v, float) for v in trained_red.loss_history)
+
+    def test_train_accepts_image_shaped_input(self):
+        """x shaped (N, C, H, W) -- e.g. a CNN's raw input -- must not crash np.hstack.
+
+        Regression test: train_cage used to hstack raw x directly against the
+        2D softmax array, which only worked for already-flat (N, D) x.
+        """
+        rng = np.random.RandomState(0)
+        n_samples, channels, height, width = 40, 3, 4, 4
+        x = rng.rand(n_samples, channels, height, width).astype(np.float32)
+        y = rng.randint(0, 3, size=n_samples)
+
+        model_module = ImageMockModelModule(num_classes=3)
+        data_module = MockDataModule(x, y, num_classes=3)
+
+        red = RED(
+            model_module, data_module,
+            num_inducing_points=10, training_iterations=2, batch_size=8,
+        )
+        red.train_cage()
+
+        assert red.layer_params["input_dim"] == channels * height * width
+
+    def test_predict_accepts_image_shaped_input(self):
+        """predict() must flatten image-shaped x the same way train_cage does."""
+        rng = np.random.RandomState(0)
+        n_samples, channels, height, width = 40, 3, 4, 4
+        x = rng.rand(n_samples, channels, height, width).astype(np.float32)
+        y = rng.randint(0, 3, size=n_samples)
+
+        model_module = ImageMockModelModule(num_classes=3)
+        data_module = MockDataModule(x, y, num_classes=3)
+
+        red = RED(
+            model_module, data_module,
+            num_inducing_points=10, training_iterations=2, batch_size=8,
+        )
+        red.train_cage()
+
+        y_pred = model_module._get_predictions(x[:10])
+        scores = red.predict(x[:10], y_pred)
+        assert scores.shape == (10,)
 
 
 class TestREDPrediction:

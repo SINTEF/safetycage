@@ -1,0 +1,29 @@
+[
+  {
+    "example": "03-cifar10-cnn",
+    "method": "RED",
+    "threshold": 0.7481262683114657,
+    "auroc": 0.8162929061784896,
+    "test_samples": 400,
+    "total_errors": 115,
+    "flagged": 160,
+    "errors_caught": 85,
+    "errors_missed": 30,
+    "coverage": 0.6,
+    "baseline_accuracy": 0.7125,
+    "baseline_precision_macro": 0.7283738790562306,
+    "baseline_recall_macro": 0.7150656651855763,
+    "baseline_f1_macro": 0.716937738354169,
+    "baseline_MCC": 0.6809509746294787,
+    "cage_kept_accuracy": 0.875,
+    "cage_kept_precision_macro": 0.8637158810688221,
+    "cage_kept_recall_macro": 0.8570786035553652,
+    "cage_kept_f1_macro": 0.8570769636853658,
+    "cage_kept_MCC": 0.8613004583714834,
+    "with_review_accuracy": 0.925,
+    "with_review_precision_macro": 0.9255846492925045,
+    "with_review_recall_macro": 0.9222727074027564,
+    "with_review_f1_macro": 0.922586495222584,
+    "with_review_MCC": 0.9167944335466076
+  }
+]

@@ -1,4 +1,6 @@
 import numpy as np
+from tqdm import tqdm
+
 from safetycage.safetycage import SafetyCage
 
 try:
@@ -182,7 +184,7 @@ class RED(SafetyCage):
         residuals = correct - c_hat
 
         # Step 4: composite features [x, sigma]
-        x_float = np.asarray(x, dtype=np.float32)
+        x_float = np.asarray(x, dtype=np.float32).reshape(len(x), -1)
         sigma_float = np.asarray(sigma, dtype=np.float32)
         features = np.hstack([x_float, sigma_float])
         input_dim = x_float.shape[1]
@@ -214,13 +216,22 @@ class RED(SafetyCage):
         dataset = TensorDataset(features_tensor, residuals_tensor)
         loader = DataLoader(dataset, batch_size=self.batch_size, shuffle=True)
 
-        for _ in range(self.training_iterations):
+        self.loss_history = []
+
+        progress = tqdm(range(self.training_iterations), desc="Training RED")
+        for _ in progress:
+            epoch_losses = []
             for x_batch, y_batch in loader:
                 optimizer.zero_grad()
                 output = model(x_batch)
                 loss = -mll(output, y_batch)
                 loss.backward()
                 optimizer.step()
+                epoch_losses.append(loss.item())
+
+            epoch_loss = float(np.mean(epoch_losses))
+            self.loss_history.append(epoch_loss)
+            progress.set_postfix(loss=epoch_loss)
 
         model.eval()
         likelihood.eval()
@@ -263,7 +274,7 @@ class RED(SafetyCage):
         sigma = self.model_module._get_probabilities(x)
         c_hat = np.max(sigma, axis=1)
 
-        x_float = np.asarray(x, dtype=np.float32)
+        x_float = np.asarray(x, dtype=np.float32).reshape(len(x), -1)
         sigma_float = np.asarray(sigma, dtype=np.float32)
         features = np.hstack([x_float, sigma_float])
         features_tensor = torch.tensor(features, dtype=torch.float32, device=DEVICE)

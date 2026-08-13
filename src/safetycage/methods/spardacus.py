@@ -465,13 +465,15 @@ class SPARDACUS(SafetyCage):
                 ecdf_correct = self.layer_params[layer][class_label]["ecdf_correct"]
                 ecdf_incorrect = self.layer_params[layer][class_label]["ecdf_incorrect"]
                 
-                if self.s_statistic_source == "correctly": 
-                    # Right-sided test. Small p-value indicates sample is incorrectly classfied                           
-                    pvalue[sample_index,layer_index] = 1 - ecdf_correct(statistic)
-                    
+                if self.s_statistic_source == "correctly":
+                    # Right-sided test. Small p-value indicates sample is incorrectly classfied
+                    # ecdf_correct(statistic) returns a shape-(1,) array; numpy 2.x no longer
+                    # allows assigning that into a scalar slot, so extract the scalar first.
+                    pvalue[sample_index,layer_index] = (1 - ecdf_correct(statistic))[0]
+
                 elif self.s_statistic_source == "incorrectly":
                     # Left-sided test. Small p-value indicates sample is correctly classified.
-                    pvalue[sample_index,layer_index] = ecdf_incorrect(statistic)
+                    pvalue[sample_index,layer_index] = ecdf_incorrect(statistic)[0]
                     
         return pvalue
 
