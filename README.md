@@ -2,9 +2,18 @@
   <img src="docs/_static/logo-2.png" height="300" alt="Project Logo">
 </p>
 
+<p align="center">
+  <a href="https://pypi.org/project/safetycage/"><img src="https://img.shields.io/pypi/v/safetycage.svg" alt="PyPI version"></a>
+  <a href="https://safetycage.readthedocs.io/"><img src="https://img.shields.io/readthedocs/safetycage" alt="Docs"></a>
+  <a href="https://pypi.org/project/safetycage/"><img src="https://img.shields.io/pypi/pyversions/safetycage.svg" alt="Python versions"></a>
+  <a href="https://github.com/SINTEF/safetycage/blob/main/LICENSE"><img src="https://img.shields.io/pypi/l/safetycage.svg" alt="License"></a>
+</p>
+
 SafetyCage is a Python package for **detecting misclassified predictions** from machine learning models in classification tasks. It provides a unified interface for multiple statistical detection methods, enabling users to quantify prediction reliability and flag potentially incorrect outputs across different models and datasets easily.
 
-It is available on PyPI here: https://pypi.org/project/safetycage/.
+Available on PyPI: https://pypi.org/project/safetycage/.
+
+Full documentation is available at https://safetycage.readthedocs.io/.
 
 ## Background
 
@@ -25,18 +34,25 @@ Each method outputs a statistic or p-value that reflects how likely a prediction
 Alternatively, you can implement your own method by initializing a base class from the safetycage abstract base class, which defines how methods should be implemented.
 
 ## Requirements
-Currently, safetyCage **requires** Python 3.11.7. Consider creating an environment for your project with safetycage that uses Python 3.11.7.
+safetycage requires Python **3.13** or later.
 
-> We are working to make this more flexible.
+Core dependencies (installed automatically): `joblib`, `matplotlib`, `numpy`.
 
 ## Installation
-Install via pip using the command:
 
-```
+```bash
 pip install safetycage
+# or: uv add safetycage
 ```
 
-The dependencies should be automatically installed when you install safetycage. If not, consider seeing the dependencies listed in the pyproject.toml available on [GitHub](https://github.com/SINTEF/safetycage/blob/main/pyproject.toml).
+Some methods need extra dependencies, installed via `pip install safetycage[extra]` (or `uv add "safetycage[extra]"`):
+
+| Extra | Uses | Adds |
+| --- | --- | --- |
+| `red` | `RED` | `torch`, `gpytorch` |
+| `spardacus` | `SPARDACUS` | `statsmodels`, `scipy`, `scikit-learn`, `tqdm` |
+| `mahalanobis` | `Mahalanobis` | `statsmodels`, `scipy` |
+| `torch` | `TorchModelModule` | `torch` |
 
 
 <!-- ## Visuals
@@ -44,7 +60,7 @@ The dependencies should be automatically installed when you install safetycage. 
 
 ## Tutorials & Examples
 
-To learn how to use safetycage, check out the safetycage tutorials available at https://github.com/safety-cage/safetycage-tutorials. These provide full examples and tutorials on how to use safetycage, and thus also providing scripts to train models to test the safetycage methods on!
+To learn how to use safetycage, check out the [`examples/`](https://github.com/SINTEF/safetycage/tree/main/examples) directory in this repository. It contains complete integrations with runnable notebooks, including scripts to train models to test the safetycage methods on.
 
 ## Changelog
 See the [CHANGELOG.MD](https://github.com/SINTEF/safetycage/blob/main/CHANGELOG.md) for details on versioning.
@@ -61,15 +77,19 @@ If you encounter issues or have questions:
 If you would like to contribute, please reach out to our safetycage team, listed below!
 
 ## Authors
-*   **Pål Vegard Bun Johnsen** - [palVJ](https://github.com/palVJ)
-*   **Joel Bjervig** - [stjoel](https://github.com/stjoel)
-*   **Julia Qiu** - [jq11](https://github.com/jq-11)
+*   **Pål Vegard Bun Johnsen** ([palVJ](https://github.com/palVJ))
+*   **Joel Bjervig** ([joelbjervig](https://github.com/joelbjervig))
+*   **Julia Qiu** ([jq11](https://github.com/jq-11))
 
 ## Acknowledgment
 
-The MSP method was introduced by Hendrycks and Gimpel in *A Baseline for Detecting Misclassified and Out-of-Distribution Examples in Neural Networks*. 
+The MSP method was introduced by Hendrycks and Gimpel in [*A Baseline for Detecting Misclassified and Out-of-Distribution Examples in Neural Networks*](https://arxiv.org/pdf/1610.02136).
 
-The DOCTOR method was introduced by Granese et al. in *DOCTOR: A Simple Method for Detecting Misclassification Errors.* 
+The DOCTOR method was introduced by Granese et al. in [*DOCTOR: A Simple Method for Detecting Misclassification Errors*](https://arxiv.org/abs/2106.02395).
+
+The Mahalanobis method is described in [Johnsen et al.](https://proceedings.mlr.press/v233/johnsen24a.html).
+
+The SPARDACUS method is described in [Johnsen et al.](https://proceedings.mlr.press/v265/johnsen25a.html).
 
 A proper citation for these methods is provided in the docstring of the code using these methods.
 
