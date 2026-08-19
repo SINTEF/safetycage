@@ -10,6 +10,15 @@
   common case of data that's already loaded and split. Accepts either
   format for any split, normalizing pandas input to numpy internally.
 
+### Fix
+
+- `RED.flag()` was missing entirely: `RED` inherited `SafetyCage.flag()`,
+  which reads `self.threshold`, but `RED.save_cage`/`load_cage` only ever
+  set `self.alpha`, so flagging a trained `RED` cage raised `ValueError:
+  Missing threshold parameter`. `RED` now defines its own `flag()` and
+  `find_best_threshold()`, mirroring the self-contained `alpha`-based
+  pattern `SPARDACUS` already uses.
+
 ## v0.0.61 (11/08/2026)
 
 ### Feature

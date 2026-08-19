@@ -142,6 +142,7 @@ class RED(SafetyCage):
         self.learning_rate = kwargs.get("learning_rate", 0.01)
         self.batch_size = kwargs.get("batch_size", 256)
         self.random_state = kwargs.get("random_state", 42)
+        self.alpha = kwargs.get("alpha", None)
 
         self._last_uncertainty = None
 
@@ -291,6 +292,41 @@ class RED(SafetyCage):
 
         detection_scores = c_hat + r_mean
         return detection_scores
+
+    def flag(self, statistics, alpha=None) -> float | np.ndarray:
+        """
+        Flag samples with detection score <= alpha as potential misclassifications.
+
+        Args:
+            statistics (numpy.ndarray): Detection scores from ``predict()``.
+            alpha (float, optional): Threshold for flagging samples. Falls back
+                to ``self.alpha`` if not provided.
+
+        Returns:
+            numpy.ndarray: Boolean array where True indicates a flagged sample.
+        """
+        if alpha is None:
+            if getattr(self, "alpha", None) is not None:
+                alpha = self.alpha
+            else:
+                raise ValueError("Missing alpha parameter: must be provided as input or set as class attribute")
+
+        return statistics <= alpha
+
+    def find_best_threshold(self, y_true, y_probs, metric_fn, **kwargs) -> dict:
+        """
+        Find the optimal alpha for flagging samples.
+
+        Thin wrapper over the base implementation that renames the result key
+        from ``threshold_opt`` to ``alpha_opt`` to match RED's own terminology.
+
+        Returns:
+            dict: Same as the base implementation, with ``alpha_opt`` instead
+                of ``threshold_opt``.
+        """
+        result = super().find_best_threshold(y_true, y_probs, metric_fn, **kwargs)
+        result["alpha_opt"] = float(result.pop("threshold_opt"))
+        return result
 
     def save_cage(self, path):
         """Save trained RED cage to disk.
