@@ -69,15 +69,7 @@ class CIFAR10DataModule(DataModule):
             random_state: Seed for the train/val shuffle.
             device: Stored on the base class; the arrays stay on the CPU and
                 the ModelModule moves them.
-            x_train, y_train, x_val, y_val, x_test, y_test: Already-loaded
-                and split data -- e.g. a half of CIFAR-10 reserved for the
-                model when the other half is held out entirely for the
-                safety cage. If any one of the six is given, all six are
-                required, and CIFAR-10 is not downloaded or re-split at
-                all: setup() just transforms and stores what was passed in.
-                Each x_* must be channel-last uint8 pixels, shaped like
-                ``torchvision.datasets.CIFAR10(...).data`` -- the same raw
-                format ``_load_data`` returns -- not already transformed.
+            x_train, y_train, x_val, y_val, x_test, y_test: Already-loaded and split data
         """
         super().__init__(data_dir or DEFAULT_DATA_DIR, from_cache, batch_size, device)
 
