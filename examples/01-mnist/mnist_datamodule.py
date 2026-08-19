@@ -39,6 +39,12 @@ class MNISTDataModule(DataModule):
         normalize: bool = True,
         random_state: int = 42,
         device: str = "cpu",
+        x_train: Optional[Any] = None,
+        y_train: Optional[Any] = None,
+        x_val: Optional[Any] = None,
+        y_val: Optional[Any] = None,
+        x_test: Optional[Any] = None,
+        y_test: Optional[Any] = None,
     ) -> None:
         """
         Args:
@@ -57,6 +63,7 @@ class MNISTDataModule(DataModule):
             random_state: Seed for the train/val shuffle.
             device: Stored on the base class; the arrays stay on the CPU and
                 the ModelModule moves them.
+            x_train, y_train, x_val, y_val, x_test, y_test: Already-loaded and split data
         """
         super().__init__(data_dir or DEFAULT_DATA_DIR, from_cache, batch_size, device)
 
@@ -65,6 +72,13 @@ class MNISTDataModule(DataModule):
         self.normalize = normalize
         self.random_state = random_state
         self.image_shape = (28, 28)
+
+        provided = (x_train, y_train, x_val, y_val, x_test, y_test)
+        if any(p is not None for p in provided) and not all(p is not None for p in provided):
+            raise ValueError(
+                "Pass all six of x_train/y_train/x_val/y_val/x_test/y_test, or none of them."
+            )
+        self._provided_splits = provided if provided[0] is not None else None
 
         self.setup()
 
@@ -88,12 +102,15 @@ class MNISTDataModule(DataModule):
         fitted on the data, so there is no split-order leakage to worry about
         the way there would be with a fitted scaler.
         """
-        x_train_val, y_train_val = self._load_data(self.data_dir, train=True)
-        x_test, y_test = self._load_data(self.data_dir, train=False)
+        if self._provided_splits is not None:
+            x_train, y_train, x_val, y_val, x_test, y_test = self._provided_splits
+        else:
+            x_train_val, y_train_val = self._load_data(self.data_dir, train=True)
+            x_test, y_test = self._load_data(self.data_dir, train=False)
 
-        x_train, y_train, x_val, y_val = self._split(
-            x_train_val, y_train_val, self.val_split
-        )
+            x_train, y_train, x_val, y_val = self._split(
+                x_train_val, y_train_val, self.val_split
+            )
 
         self.data_train = self._transform(x_train, y_train)
         self.data_val = self._transform(x_val, y_val)
