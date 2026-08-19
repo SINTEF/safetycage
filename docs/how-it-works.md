@@ -75,6 +75,12 @@ if your model already ends in softmax/sigmoid. Constructing
 place, not on a copy, so pass in a copy if you need the original to stay on
 its device or in train mode.
 
+Passing `selected_layers` (names from `model.named_modules()`) additionally
+unlocks SPARDACUS: each selected submodule is hooked and its raw forward
+output is returned as the activation. Mahalanobis and RED still need a
+custom `ModelModule`, since they need a genuine pre-nonlinearity signal that
+a generic named-submodule hook can't provide.
+
 {py:class}`~safetycage.modelmodules.auto_modelmodule.AutoModelModule` picks
 between the two for you:
 
