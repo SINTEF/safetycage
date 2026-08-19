@@ -9,8 +9,36 @@
   numpy arrays or pandas DataFrame/Series — no adapter code needed for the
   common case of data that's already loaded and split. Accepts either
   format for any split, normalizing pandas input to numpy internally.
+- `TorchModelModule` now accepts `selected_layers` (names from
+  `model.named_modules()`) and implements `_get_activations`, unlocking
+  SPARDACUS without a hand-written `ModelModule`. Mahalanobis and RED still
+  need a genuine pre-nonlinearity signal this class can't provide, so
+  `_get_pre_activations` remains unimplemented.
+- `examples/03-cifar10-cnn`: a CNN trained on CIFAR-10, guarded with RED.
+  Compares two deployment scenarios (abstain on what's flagged vs. review
+  and correct what's flagged) and records results to a shared
+  `examples/results.json`, so runs across different methods and examples
+  can be compared side by side.
+- `examples/04-activity-monitor`: a GRU trained on the UCI Daily and
+  Sports Activities dataset (19 activities from 5 body-worn IMU sensors),
+  comparing MSP against SPARDACUS side by side. The first example to wrap
+  its model with the generic `TorchModelModule` directly instead of a
+  hand-written `ModelModule`.
+- `MNISTDataModule` now accepts pre-split `x_train`/`y_train`/etc. arrays
+  directly, matching `ArrayDataModule`/`CIFAR10DataModule`'s constructor
+  pattern — lets a notebook split data once (e.g. into disjoint
+  model-training and cage-training halves) without re-deriving
+  `MNISTDataModule`'s own split logic.
+- All three example notebooks (MNIST, CIFAR-10 CNN, activity-monitor) are
+  now rendered on the documentation site under "Examples", not just
+  linked to on GitHub.
 
 ### Fix
+
+- `xgboost` was listed as a core dependency in `pyproject.toml`, but
+  nothing in `src/safetycage` imports it — only `examples/02-xgboost`
+  does. Moved to the `examples` dependency-group so installing
+  `safetycage` doesn't pull in a heavy, unused dependency.
 
 - `RED.flag()` was missing entirely: `RED` inherited `SafetyCage.flag()`,
   which reads `self.threshold`, but `RED.save_cage`/`load_cage` only ever
