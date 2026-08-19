@@ -63,13 +63,46 @@ def test_output_is_probabilities_flag_skips_softmax():
     np.testing.assert_allclose(module._get_probabilities(x), expected, atol=1e-6)
 
 
-def test_activations_not_implemented(logits_model):
+def test_activations_not_implemented_without_selected_layers(logits_model):
     module = TorchModelModule(logits_model)
     x = np.zeros((2, 4), dtype=np.float32)
     with pytest.raises(NotImplementedError):
         module._get_activations(x)
+
+
+@pytest.fixture
+def block_model():
+    """Linear -> ReLU, named so both can be selected as activation layers."""
+    torch.manual_seed(0)
+    model = nn.Sequential()
+    model.add_module("linear", nn.Linear(4, 3))
+    model.add_module("relu", nn.ReLU())
+    return model
+
+
+def test_pre_activations_not_implemented(block_model):
+    module = TorchModelModule(block_model, selected_layers=["linear"])
+    x = np.zeros((2, 4), dtype=np.float32)
     with pytest.raises(NotImplementedError):
         module._get_pre_activations(x)
+
+
+def test_get_activations_captures_named_submodule_output(block_model):
+    module = TorchModelModule(block_model, selected_layers=["linear", "relu"])
+    x = np.random.RandomState(4).randn(5, 4).astype(np.float32)
+
+    with torch.no_grad():
+        linear_out = block_model.linear(torch.as_tensor(x)).numpy()
+        relu_out = block_model.relu(torch.as_tensor(linear_out)).numpy()
+
+    activations = module._get_activations(x)
+    np.testing.assert_allclose(activations["linear"], linear_out, atol=1e-6)
+    np.testing.assert_allclose(activations["relu"], relu_out, atol=1e-6)
+
+
+def test_unknown_selected_layer_raises(logits_model):
+    with pytest.raises(ValueError, match="no submodule"):
+        TorchModelModule(logits_model, selected_layers=["nonexistent"])
 
 
 def test_import_error_when_torch_missing(monkeypatch):
