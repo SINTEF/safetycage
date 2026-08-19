@@ -64,14 +64,19 @@ class probabilities.
 ## Worked examples
 
 The [`examples/`](https://github.com/SINTEF/safetycage/tree/main/examples)
-directory contains complete integrations. `examples/01-mnist` wraps a PyTorch
-MLP and guards it with MSP, including a runnable notebook, rendered below.
+directory contains complete integrations, each with a runnable notebook
+rendered below. `examples/01-mnist` wraps a PyTorch MLP and guards it with
+MSP; `examples/03-cifar10-cnn` wraps a CNN and guards it with RED;
+`examples/04-activity-monitor` wraps a GRU trained on body-worn sensor data
+and compares MSP against SPARDACUS.
 
 ```{toctree}
 :maxdepth: 1
 :caption: Examples
 
 examples/mnist
+examples/cifar10
+examples/activity-monitor
 ```
 
 ```{toctree}
