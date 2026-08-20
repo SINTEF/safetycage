@@ -68,7 +68,6 @@ See the [CHANGELOG.MD](https://github.com/SINTEF/safetycage/blob/main/CHANGELOG.
 ## Support
 If you encounter issues or have questions:
 - Open an issue on the repository: https://github.com/SINTEF/safetycage/issues.
-- Check the [safetycage-tutorials repo](https://github.com/safety-cage/safetycage-tutorials) for examples.
 
 <!-- ## Roadmap
 - TBD -->

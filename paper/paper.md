@@ -107,7 +107,7 @@ alpha, mcc = cage.find_best_threshold_flag(metric="mcc")
 flags = cage.flag(alpha=alpha)
 ```
 
-The returned `flags` array indicates, for each test sample, whether the detector considers it likely to be misclassified. Full worked tutorials covering MSP, SPARDACUS, and other methods on various datasets are available at [safetycage-tutorials](https://github.com/safety-cage/safetycage-tutorials).
+The returned `flags` array indicates, for each test sample, whether the detector considers it likely to be misclassified. Full worked tutorials covering MSP, SPARDACUS, and other methods on various datasets are available in the [`examples`](https://github.com/SINTEF/safetycage/tree/main/examples) directory of the repository and in the [package documentation](https://safetycage.readthedocs.io/).
 
 # Future Work
 
