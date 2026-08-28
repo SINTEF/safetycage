@@ -27,7 +27,7 @@ class Mahalanobis(SafetyCage):
     out-of-distribution. When multiple layers are used, a global p-value is found by 
     combining the per-layer p-valyes using either Fisher’s method or the Cauchy 
     combination test. The optimal threshold to compare the resulting p-values is given 
-    to the alpha attribute.
+    to the threshold attribute.
 
     See the below research paper for a thorough explanation of the Mahalanobis method.
 
@@ -104,15 +104,36 @@ class Mahalanobis(SafetyCage):
         return "mahalanobis"
 
         
-    def train_cage(self, x=None, y=None, y_pred=None) -> None:
+    def fit(
+        self,
+        x=None,
+        y=None,
+        y_pred=None,
+        find_threshold=False,
+        metric_fn=None,
+        x_val=None,
+        y_val=None,
+        search="uniform",
+        num_thresholds=1000,
+        greater_is_better=True,
+    ) -> None:
         """
-        For each layer and class, train_cage estimates the mean and covariance of activations,
+        For each layer and class, fit estimates the mean and covariance of activations,
         and optionally constructs an empirical distribution of Mahalanobis distances.
 
         Args:
             x: Input data. If None, loaded from the data module.
             y: Ground-truth labels. If None, loaded from the data module.
             y_pred: Model predictions. If None, computed using the model module's _get_predictions method.
+            find_threshold (bool, optional): If True, also choose ``self.threshold``
+                on validation data after fitting -- see ``SafetyCage.fit_threshold``
+                for what the remaining keyword arguments do. (default: False)
+            metric_fn (callable, optional): Metric to maximize (default: MCC).
+            x_val: Validation inputs. If None, loaded from the data module.
+            y_val: Validation labels. If None, loaded from the data module.
+            search (str, optional): Threshold sweep strategy (default: "uniform").
+            num_thresholds (int, optional): Number of candidate thresholds (default: 1000).
+            greater_is_better (bool, optional): Whether greater metric values are better (default: True).
         """
         if x is None:
             x, y = self.data_module.data_train
@@ -161,8 +182,18 @@ class Mahalanobis(SafetyCage):
                     num_observations = num_observations
                     )
 
+        if find_threshold:
+            self.fit_threshold(
+                metric_fn=metric_fn,
+                x_val=x_val,
+                y_val=y_val,
+                search=search,
+                num_thresholds=num_thresholds,
+                greater_is_better=greater_is_better,
+            )
 
-    def _get_class_activations(self, layer_activations: dict, layer: str, 
+
+    def _get_class_activations(self, layer_activations: dict, layer: str,
                             y_data: np.ndarray, class_index: int) -> np.ndarray:
         """
         Extract and returns class-specific activations based on labels.

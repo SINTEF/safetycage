@@ -80,7 +80,7 @@ def separable_cage():
     return model_module, data_module, np.array(x_indices), np.array(y_true)
 
 
-def test_predict_after_train_cage_does_not_raise(separable_cage):
+def test_predict_after_fit_does_not_raise(separable_cage):
     """Regression test for a numpy 2.x incompatibility: ECDF(...) returns a
     shape-(1,) array, and numpy 2.x no longer allows assigning that into a
     scalar array slot (``arr[i, j] = np.array([x])``), raising
@@ -92,7 +92,7 @@ def test_predict_after_train_cage_does_not_raise(separable_cage):
     spardacus = SPARDACUS(
         model_module=model_module, data_module=data_module, s_statistic_source="correctly"
     )
-    spardacus.train_cage()
+    spardacus.fit()
 
     statistics = spardacus.predict(x_indices, y_true)
 

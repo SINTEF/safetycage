@@ -107,7 +107,7 @@ from safetycage.methods.msp import MSP
 from safetycage.utils.metrics import MCC
 
 msp = MSP(model_module=model_module, data_module=data_module)
-msp.train_cage()
+msp.fit()
 
 # Confidence statistic per sample; low means "likely wrong".
 statistics = msp.predict(x_val, y_val)
@@ -117,5 +117,5 @@ incorrect = (model_module._get_predictions(x_val) != y_val).astype(int)
 result = msp.find_best_threshold(y_true=incorrect, y_probs=statistics, metric_fn=MCC)
 
 # ...then apply it to held-out data.
-flagged = msp.flag(msp.predict(x_test, y_test), result["alpha_opt"])
+flagged = msp.flag(msp.predict(x_test, y_test), result["threshold_opt"])
 ```

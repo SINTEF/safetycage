@@ -56,7 +56,7 @@ Several software packages address related aspects of machine learning model reli
 
 **`ModelModule`** wraps the user's trained classifier behind a uniform interface. Subclasses implement `_get_predictions()` to obtain class outputs and `_get_activations()` to extract intermediate layer representations. Because the interface depends only on NumPy arrays, any model — whether built with scikit-learn, PyTorch, TensorFlow, or another framework — can be integrated by implementing these methods.
 
-**`SafetyCage`** is the base class for detection methods. It composes a `ModelModule` and a `DataModule`, and delegates framework-specific concerns to them. Subclasses implement `train_cage()` to learn detection parameters from calibration data and `predict()` to compute per-sample scores indicating misclassification risk. The base class provides shared functionality: `flag()` applies a decision threshold to the scores, `find_best_threshold()` selects the optimal threshold by maximizing a user-chosen metric, and `save_cage()` / `load_cage()` handle serialization of trained parameters.
+**`SafetyCage`** is the base class for detection methods. It composes a `ModelModule` and a `DataModule`, and delegates framework-specific concerns to them. Subclasses implement `fit()` to learn detection parameters from calibration data and `predict()` to compute per-sample scores indicating misclassification risk. The base class provides shared functionality: `flag()` applies a decision threshold to the scores, `find_best_threshold()` selects the optimal threshold by maximizing a user-chosen metric, and `save_cage()` / `load_cage()` handle serialization of trained parameters.
 
 This design allows any combination of detection method, model, and dataset to be composed freely. Users can compare multiple methods on the same data and model, or apply the same method across different models, with no code duplication.
 
@@ -97,14 +97,16 @@ A `SafetyCage` method is then instantiated with these modules and trained on val
 from safetycage import MSP
 
 cage = MSP(model_module=model_module, data_module=data_module)
-cage.train_cage()
+cage.fit()
 ```
 
 Finally, the optimal detection threshold is selected by maximizing a chosen metric (here, the Matthews Correlation Coefficient) over candidate thresholds. The trained detector can then flag likely misclassifications on new data:
 
 ```python
-alpha, mcc = cage.find_best_threshold_flag(metric="mcc")
-flags = cage.flag(alpha=alpha)
+from safetycage.utils.metrics import MCC
+
+result = cage.find_best_threshold(y_true=incorrect_val, y_probs=statistics_val, metric_fn=MCC)
+flags = cage.flag(statistics_test, result["threshold_opt"])
 ```
 
 The returned `flags` array indicates, for each test sample, whether the detector considers it likely to be misclassified. Full worked tutorials covering MSP, SPARDACUS, and other methods on various datasets are available in the [`examples`](https://github.com/SINTEF/safetycage/tree/main/examples) directory of the repository and in the [package documentation](https://safetycage.readthedocs.io/).

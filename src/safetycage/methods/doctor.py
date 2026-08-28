@@ -40,13 +40,34 @@ class DOCTOR(SafetyCage):
         """Return the name of the safety cage method."""
         return "DOCTOR"
     
-    def train_cage(self, x=None, y=None, y_pred=None) -> None:
+    def fit(
+        self,
+        x=None,
+        y=None,
+        y_pred=None,
+        find_threshold=False,
+        metric_fn=None,
+        x_val=None,
+        y_val=None,
+        search="uniform",
+        num_thresholds=1000,
+        greater_is_better=True,
+    ) -> None:
         """
         Estimate empirical misclassification rate from training data.
 
         Args:
             x: Input data
             y: Tuple containing (correct_predictions, incorrect_predictions)
+            find_threshold (bool, optional): If True, also choose ``self.threshold``
+                on validation data after fitting -- see ``SafetyCage.fit_threshold``
+                for what the remaining keyword arguments do. (default: False)
+            metric_fn (callable, optional): Metric to maximize (default: MCC).
+            x_val: Validation inputs. If None, loaded from the data module.
+            y_val: Validation labels. If None, loaded from the data module.
+            search (str, optional): Threshold sweep strategy (default: "uniform").
+            num_thresholds (int, optional): Number of candidate thresholds (default: 1000).
+            greater_is_better (bool, optional): Whether greater metric values are better (default: True).
         """
 
         if y is None:
@@ -55,10 +76,20 @@ class DOCTOR(SafetyCage):
             y_pred = self.model_module._get_predictions(x)
 
         num_incorrect = (y != y_pred).sum()
-        total_samples = len(y) 
-        
+        total_samples = len(y)
+
         # Calculate empirical error probability
         self.PE_1 = num_incorrect / total_samples
+
+        if find_threshold:
+            self.fit_threshold(
+                metric_fn=metric_fn,
+                x_val=x_val,
+                y_val=y_val,
+                search=search,
+                num_thresholds=num_thresholds,
+                greater_is_better=greater_is_better,
+            )
 
 
     def predict(self, x, y) -> np.ndarray:

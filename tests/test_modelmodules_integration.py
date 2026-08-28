@@ -59,7 +59,7 @@ def modules():
 def test_msp_predict_via_sklearn_modelmodule(modules):
     model_module, data_module, x, y = modules
     msp = MSP(model_module=model_module, data_module=data_module)
-    msp.train_cage()
+    msp.fit()
     statistics = msp.predict(x, y)
 
     assert statistics.shape == (len(x),)
@@ -69,7 +69,7 @@ def test_msp_predict_via_sklearn_modelmodule(modules):
 def test_doctor_predict_via_sklearn_modelmodule(modules):
     model_module, data_module, x, y = modules
     doctor = DOCTOR(model_module=model_module, data_module=data_module, method="max")
-    doctor.train_cage()
+    doctor.fit()
     statistics = doctor.predict(x, y)
 
     assert statistics.shape == (len(x),)

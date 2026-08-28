@@ -137,7 +137,7 @@ def trained_red(modules):
         learning_rate=0.05,
         batch_size=64,
     )
-    red.train_cage()
+    red.fit()
     return red
 
 
@@ -188,7 +188,7 @@ class TestREDTraining:
         y_pred = model_module._get_predictions(x)
 
         red = RED(model_module, data_module, num_inducing_points=30, training_iterations=5)
-        red.train_cage(x=x, y=y, y_pred=y_pred)
+        red.fit(x=x, y=y, y_pred=y_pred)
 
         assert "gp_model" in red.layer_params
 
@@ -200,7 +200,7 @@ class TestREDTraining:
     def test_train_accepts_image_shaped_input(self):
         """x shaped (N, C, H, W) -- e.g. a CNN's raw input -- must not crash np.hstack.
 
-        Regression test: train_cage used to hstack raw x directly against the
+        Regression test: fit used to hstack raw x directly against the
         2D softmax array, which only worked for already-flat (N, D) x.
         """
         rng = np.random.RandomState(0)
@@ -215,12 +215,12 @@ class TestREDTraining:
             model_module, data_module,
             num_inducing_points=10, training_iterations=2, batch_size=8,
         )
-        red.train_cage()
+        red.fit()
 
         assert red.layer_params["input_dim"] == channels * height * width
 
     def test_predict_accepts_image_shaped_input(self):
-        """predict() must flatten image-shaped x the same way train_cage does."""
+        """predict() must flatten image-shaped x the same way fit does."""
         rng = np.random.RandomState(0)
         n_samples, channels, height, width = 40, 3, 4, 4
         x = rng.rand(n_samples, channels, height, width).astype(np.float32)
@@ -233,7 +233,7 @@ class TestREDTraining:
             model_module, data_module,
             num_inducing_points=10, training_iterations=2, batch_size=8,
         )
-        red.train_cage()
+        red.fit()
 
         y_pred = model_module._get_predictions(x[:10])
         scores = red.predict(x[:10], y_pred)
@@ -272,18 +272,18 @@ class TestREDFlagging:
         y_pred = trained_red.model_module._get_predictions(x[:50])
         scores = trained_red.predict(x[:50], y_pred)
 
-        trained_red.alpha = 0.5
+        trained_red.threshold = 0.5
         flags = trained_red.flag(scores)
         assert flags.dtype == bool
         assert flags.shape == (50,)
 
-    def test_flag_with_explicit_alpha(self, trained_red, synthetic_data):
+    def test_flag_with_explicit_threshold(self, trained_red, synthetic_data):
         x, y, _ = synthetic_data
         y_pred = trained_red.model_module._get_predictions(x[:50])
         scores = trained_red.predict(x[:50], y_pred)
 
-        flags = trained_red.flag(scores, alpha=0.5)
-        # With leq=True, flagged means score <= alpha
+        flags = trained_red.flag(scores, threshold=0.5)
+        # With leq=True, flagged means score <= threshold
         assert np.all(flags == (scores <= 0.5))
 
     def test_find_best_threshold(self, trained_red, synthetic_data):
@@ -303,9 +303,9 @@ class TestREDFlagging:
             y_probs=scores,
             metric_fn=simple_accuracy,
         )
-        assert "alpha_opt" in result
+        assert "threshold_opt" in result
         assert "metric_max" in result
-        assert isinstance(result["alpha_opt"], float)
+        assert isinstance(result["threshold_opt"], float)
 
 
 class TestREDSaveLoad:
@@ -315,7 +315,7 @@ class TestREDSaveLoad:
         y_pred = trained_red.model_module._get_predictions(x[:30])
 
         # Get predictions before save
-        trained_red.alpha = 0.5
+        trained_red.threshold = 0.5
         scores_before = trained_red.predict(x[:30], y_pred)
 
         with tempfile.TemporaryDirectory() as tmpdir:
@@ -329,13 +329,13 @@ class TestREDSaveLoad:
 
             # Load and compare
             loaded_red = RED.load_cage(save_path, model_module, data_module)
-            assert loaded_red.alpha == 0.5
+            assert loaded_red.threshold == 0.5
             scores_after = loaded_red.predict(x[:30], y_pred)
 
             np.testing.assert_allclose(scores_before, scores_after, atol=1e-5)
 
-    def test_save_without_alpha_raises(self, trained_red):
+    def test_save_without_threshold_raises(self, trained_red):
         with tempfile.TemporaryDirectory() as tmpdir:
             save_path = os.path.join(tmpdir, "red_cage.joblib")
-            with pytest.raises(ValueError, match="alpha is not set"):
+            with pytest.raises(ValueError, match="threshold is not set"):
                 trained_red.save_cage(save_path)

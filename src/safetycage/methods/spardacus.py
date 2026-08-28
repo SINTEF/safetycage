@@ -24,8 +24,8 @@ class SPARDACUS(SafetyCage):
 
     The smaller the p-value, the more likely the sample is to be misclassified. When 
     multiple layers are used, a global p-value is found by combining the each layer's 
-    p-value using either Fisher’s method or the Cauchy combination test. The optimal 
-    threshold to compare the resulting p-values is given to the alpha attribute.
+    p-value using either Fisher’s method or the Cauchy combination test. The optimal
+    threshold to compare the resulting p-values is given to the threshold attribute.
 
     NOTE: This method **only works for neural network models**, as it relies
     on intermediate layer activations and learned representations.
@@ -47,7 +47,7 @@ class SPARDACUS(SafetyCage):
 
         s_statistic_source (str): Determines which distribution is used to
             compute p-values ("correctly" or "incorrectly").
-        alpha (float | None): Significance threshold used for flagging.
+        threshold (float | None): Significance threshold used for flagging.
         cauchy_weights_per_layer (list): Weights used for Cauchy combination test.
         test_type_between_layers (str): Method for combining p-values across layers.
         minimum_sample_size (int): Minimum number of samples required to fit
@@ -61,7 +61,7 @@ class SPARDACUS(SafetyCage):
             model_module: Reference to model module object for making predictions.
             data_module: Reference to data module object for handling data.
             s_statistic_source (str): Source used to compute p-values ("correctly" or "incorrectly").
-            alpha (float): Significance threshold for flagging samples.
+            threshold (float): Significance threshold for flagging samples.
             test_type_between_layers (str): Method for combining p-values ("fisher" or "cauchy").
             cauchy_weights_per_layer (list[float]): Weights for the Cauchy combination test.
             minimum_sample_size (int, optional): Minimum number of samples required to fit density models. (default: 10)
@@ -69,7 +69,6 @@ class SPARDACUS(SafetyCage):
         super(SPARDACUS, self).__init__(model_module, data_module, **kwargs)
 
         self.s_statistic_source = kwargs.get("s_statistic_source")
-        self.alpha = kwargs.get("alpha", None)
         self.cauchy_weights_per_layer = kwargs.get("cauchy_weights_per_layer")
         self.test_type_between_layers = kwargs.get("test_type_between_layers")
 
@@ -86,20 +85,41 @@ class SPARDACUS(SafetyCage):
         """Return the name of the safety cage method."""
         return "SPARDACUS"
 
-    def train_cage(self, x=None, y=None, y_pred=None) -> None:
+    def fit(
+        self,
+        x=None,
+        y=None,
+        y_pred=None,
+        find_threshold=False,
+        metric_fn=None,
+        x_val=None,
+        y_val=None,
+        search="uniform",
+        num_thresholds=1000,
+        greater_is_better=True,
+    ) -> None:
         """
         Train the SPARDACUS safety cage.
 
         Separates training samples into correctly and incorrectly classified groups and
-        computes parameters for each layer and class, which are later used to evaluate 
+        computes parameters for each layer and class, which are later used to evaluate
         new samples during prediction.
 
         Args:
             x: Tuple of (x_correct, x_incorrect) input data
             y: Tuple of (y_correct, y_incorrect) labels
             y_pred: Model predictions
+            find_threshold (bool, optional): If True, also choose ``self.threshold``
+                on validation data after fitting -- see ``SafetyCage.fit_threshold``
+                for what the remaining keyword arguments do. (default: False)
+            metric_fn (callable, optional): Metric to maximize (default: MCC).
+            x_val: Validation inputs. If None, loaded from the data module.
+            y_val: Validation labels. If None, loaded from the data module.
+            search (str, optional): Threshold sweep strategy (default: "uniform").
+            num_thresholds (int, optional): Number of candidate thresholds (default: 1000).
+            greater_is_better (bool, optional): Whether greater metric values are better (default: True).
         """
-        
+
         if x is None:
             x, y = self.data_module.data_train
         if y is None:
@@ -151,8 +171,18 @@ class SPARDACUS(SafetyCage):
                     class_activations_correct, class_activations_incorrect, class_label
                 )
 
+        if find_threshold:
+            self.fit_threshold(
+                metric_fn=metric_fn,
+                x_val=x_val,
+                y_val=y_val,
+                search=search,
+                num_thresholds=num_thresholds,
+                greater_is_better=greater_is_better,
+            )
 
-    def _get_class_activations(self, layer_activations: dict, layer: str, 
+
+    def _get_class_activations(self, layer_activations: dict, layer: str,
                             y_data: np.ndarray, class_index: int) -> np.ndarray:
         """
         Extract activations for a specific class (given by class_index) at a given layer.
@@ -523,34 +553,34 @@ class SPARDACUS(SafetyCage):
         raise ValueError(f"Unknown test type: {test_type}")
 
 
-    def flag(self, statistics, alpha=None) -> float | np.ndarray:
+    def flag(self, statistics, threshold=None) -> float | np.ndarray:
         """
-        Flag samples with probability less than or equal (self.s_statistic_source == "correctly") to alpha 
-        or probability more than or equal (self.s_statistic_source == "incorrectly") to alpha as incorrect.
+        Flag samples with probability less than or equal (self.s_statistic_source == "correctly") to threshold
+        or probability more than or equal (self.s_statistic_source == "incorrectly") to threshold as incorrect.
 
         Args:
             statistics (numpy.ndarray): Computed p-values
-            alpha (float): Threshold for flagging samples
+            threshold (float): Threshold for flagging samples
 
         Returns:
             numpy.ndarray: Boolean array indicating flagged samples with NaNs preserved for missing statistics.
         """
-        # Check priority of alpha parameter
-        if alpha is None:
-            # If not provided as input, try to use self.alpha
-            if hasattr(self, 'alpha') and self.alpha is not None:
-                alpha = self.alpha
+        # Check priority of threshold parameter
+        if threshold is None:
+            # If not provided as input, try to use self.threshold
+            if hasattr(self, 'threshold') and self.threshold is not None:
+                threshold = self.threshold
             else:
                 # If neither source is available, raise an error
-                raise ValueError("Missing alpha parameter: must be provided as input or set as class attribute")
-            
+                raise ValueError("Missing threshold parameter: must be provided as input or set as class attribute")
+
         if self.s_statistic_source == "correctly":
-            # If alpha argument to flag() function not none, use this and not the one in config-file
-            flags = (statistics <= alpha)
-            
+            # If threshold argument to flag() function not none, use this and not the one in config-file
+            flags = (statistics <= threshold)
+
         # Small p-value indicates sample is correctly classified. Make sure flag = 1 means prediction is deemed to be wrong
         elif self.s_statistic_source == "incorrectly":
-            flags = ~(statistics <= alpha)
+            flags = ~(statistics <= threshold)
 
         return flags
     

@@ -92,7 +92,7 @@ class RED(SafetyCage):
 
     The detection score is ``c_hat + r_mean`` where higher values indicate a
     prediction is more likely correct. Flagging uses ``leq=True``: samples with
-    score <= alpha are flagged as potential misclassifications.
+    score <= threshold are flagged as potential misclassifications.
 
     After calling ``predict()``, the GP variance is available as
     ``self._last_uncertainty`` for advanced use (e.g. OOD detection).
@@ -138,11 +138,10 @@ class RED(SafetyCage):
         self.leq = True
 
         self.num_inducing_points = kwargs.get("num_inducing_points", 500)
-        self.training_iterations = kwargs.get("training_iterations", 100)
+        self.training_iterations = kwargs.get("training_iterations", 20)
         self.learning_rate = kwargs.get("learning_rate", 0.01)
         self.batch_size = kwargs.get("batch_size", 256)
         self.random_state = kwargs.get("random_state", 42)
-        self.alpha = kwargs.get("alpha", None)
 
         self._last_uncertainty = None
 
@@ -151,7 +150,19 @@ class RED(SafetyCage):
         """Return the name of the safety cage method."""
         return "RED"
 
-    def train_cage(self, x=None, y=None, y_pred=None) -> None:
+    def fit(
+        self,
+        x=None,
+        y=None,
+        y_pred=None,
+        find_threshold=False,
+        metric_fn=None,
+        x_val=None,
+        y_val=None,
+        search="uniform",
+        num_thresholds=1000,
+        greater_is_better=True,
+    ) -> None:
         """
         Train the RED safety cage.
 
@@ -163,6 +174,15 @@ class RED(SafetyCage):
             x: Input data. If None, loaded from the data module.
             y: Ground-truth labels. If None, loaded from the data module.
             y_pred: Model predictions. If None, computed using the model module.
+            find_threshold (bool, optional): If True, also choose ``self.threshold``
+                on validation data after fitting -- see ``SafetyCage.fit_threshold``
+                for what the remaining keyword arguments do. (default: False)
+            metric_fn (callable, optional): Metric to maximize (default: MCC).
+            x_val: Validation inputs. If None, loaded from the data module.
+            y_val: Validation labels. If None, loaded from the data module.
+            search (str, optional): Threshold sweep strategy (default: "uniform").
+            num_thresholds (int, optional): Number of candidate thresholds (default: 1000).
+            greater_is_better (bool, optional): Whether greater metric values are better (default: True).
         """
         if x is None:
             x, y = self.data_module.data_train
@@ -245,6 +265,16 @@ class RED(SafetyCage):
             "num_inducing_points": n_inducing,
         }
 
+        if find_threshold:
+            self.fit_threshold(
+                metric_fn=metric_fn,
+                x_val=x_val,
+                y_val=y_val,
+                search=search,
+                num_thresholds=num_thresholds,
+                greater_is_better=greater_is_better,
+            )
+
     def predict(self, x, y) -> np.ndarray:
         """
         Compute RED detection scores for input samples.
@@ -293,41 +323,6 @@ class RED(SafetyCage):
         detection_scores = c_hat + r_mean
         return detection_scores
 
-    def flag(self, statistics, alpha=None) -> float | np.ndarray:
-        """
-        Flag samples with detection score <= alpha as potential misclassifications.
-
-        Args:
-            statistics (numpy.ndarray): Detection scores from ``predict()``.
-            alpha (float, optional): Threshold for flagging samples. Falls back
-                to ``self.alpha`` if not provided.
-
-        Returns:
-            numpy.ndarray: Boolean array where True indicates a flagged sample.
-        """
-        if alpha is None:
-            if getattr(self, "alpha", None) is not None:
-                alpha = self.alpha
-            else:
-                raise ValueError("Missing alpha parameter: must be provided as input or set as class attribute")
-
-        return statistics <= alpha
-
-    def find_best_threshold(self, y_true, y_probs, metric_fn, **kwargs) -> dict:
-        """
-        Find the optimal alpha for flagging samples.
-
-        Thin wrapper over the base implementation that renames the result key
-        from ``threshold_opt`` to ``alpha_opt`` to match RED's own terminology.
-
-        Returns:
-            dict: Same as the base implementation, with ``alpha_opt`` instead
-                of ``threshold_opt``.
-        """
-        result = super().find_best_threshold(y_true, y_probs, metric_fn, **kwargs)
-        result["alpha_opt"] = float(result.pop("threshold_opt"))
-        return result
-
     def save_cage(self, path):
         """Save trained RED cage to disk.
 
@@ -341,8 +336,8 @@ class RED(SafetyCage):
         from pathlib import Path as _Path
         import joblib
 
-        if getattr(self, "alpha", None) is None:
-            raise ValueError("Cannot save: cage has not been trained (alpha is not set).")
+        if getattr(self, "threshold", None) is None:
+            raise ValueError("Cannot save: cage has not been trained (threshold is not set).")
 
         path = _Path(path)
         path.parent.mkdir(parents=True, exist_ok=True)
@@ -359,8 +354,8 @@ class RED(SafetyCage):
             pt_path,
         )
 
-        # Save alpha and other metadata via joblib
-        parameters = {"alpha": self.alpha, "has_pt_file": True}
+        # Save threshold and other metadata via joblib
+        parameters = {"threshold": self.threshold, "has_pt_file": True}
         joblib.dump(parameters, path)
 
     @classmethod
@@ -404,7 +399,7 @@ class RED(SafetyCage):
         likelihood.eval()
 
         instance = cls(model_module=model_module, data_module=data_module, **kwargs)
-        instance.alpha = parameters["alpha"]
+        instance.threshold = parameters["threshold"]
         instance.layer_params = {
             "gp_model": model,
             "likelihood": likelihood,

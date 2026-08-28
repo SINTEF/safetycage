@@ -1,4 +1,3 @@
-from re import search
 from typing import Optional
 from abc import ABC, abstractmethod
 import numpy as np
@@ -6,7 +5,7 @@ import joblib
 from pathlib import Path
 from safetycage.modelmodule import ModelModule
 from safetycage.datamodule import DataModule
-from safetycage.utils.metrics import calculate_confusion_rates, recall, specificity
+from safetycage.utils.metrics import calculate_confusion_rates, recall, specificity, MCC
 class SafetyCage(ABC):
     """
     Abstract base class for safety cage methods.
@@ -61,7 +60,7 @@ class SafetyCage(ABC):
         
     #Train the parameters of the specified SafetyCage
     @abstractmethod
-    def train_cage(self) -> None:
+    def fit(self) -> None:
         """
         Train the safety cage.
 
@@ -145,7 +144,7 @@ class SafetyCage(ABC):
 
         return flags
 
-    def find_best_threshold(self, y_true, y_probs, metric_fn, greater_is_better=True, num_thresholds=1000, search="linear") -> float | np.ndarray:
+    def find_best_threshold(self, y_true, y_probs, metric_fn, greater_is_better=True, num_thresholds=1000, search="uniform") -> float | np.ndarray:
         """
         Find the optimal threshold for flagging samples by calling self.flag().
 
@@ -161,7 +160,7 @@ class SafetyCage(ABC):
         Returns:
             dict: Dictionary containing the optimal threshold and the corresponding best metric value
         """
-        if search == "linear":
+        if search == "uniform":
             thresholds = np.linspace(min(y_probs), max(y_probs), num=num_thresholds)
         elif search == "log":
             thresholds = np.logspace(np.log10(max(1e-8, min(y_probs))), np.log10(max(y_probs)), num=num_thresholds)
@@ -186,8 +185,8 @@ class SafetyCage(ABC):
             metrics.append(metric)
 
         optimal_metric_index = np.argmax(metrics) if greater_is_better else np.argmin(metrics)
-        best_threshold = thresholds[optimal_metric_index]
-        best_metric = metrics[optimal_metric_index]
+        best_threshold = float(thresholds[optimal_metric_index])
+        best_metric = float(metrics[optimal_metric_index])
         
         return {
             "threshold_opt": best_threshold,
@@ -195,6 +194,69 @@ class SafetyCage(ABC):
             "thresholds": thresholds,
             "metrics": metrics,
         }
+
+    def fit_threshold(
+        self,
+        metric_fn=None,
+        x_val=None,
+        y_val=None,
+        search="uniform",
+        num_thresholds=1000,
+        greater_is_better=True,
+    ) -> dict:
+        """
+        Choose ``self.threshold`` by maximizing ``metric_fn`` on validation data.
+
+        Runs the predict -> find_best_threshold pipeline every example notebook
+        otherwise writes by hand: get the model's predictions on the validation
+        split, compute per-sample statistics with this (already-fitted) cage,
+        sweep thresholds, and keep the best one. Subclasses call this from the
+        end of their own ``fit()`` when asked to auto-select a threshold --
+        it's deliberately kept separate from ``fit()`` itself so it can also be
+        called on its own, or against a caller-supplied validation split.
+
+        Uses validation data rather than the training split ``fit()`` learns
+        the statistic from: picking a threshold on the same data used to fit
+        the statistic would overstate how well that threshold generalizes.
+
+        Args:
+            metric_fn (callable, optional): Metric to maximize (default: MCC).
+            x_val: Validation inputs. If None, loaded from ``self.data_module.data_val``.
+            y_val: Validation labels. If None, loaded from ``self.data_module.data_val``.
+            search (str, optional): Threshold sweep strategy, "uniform" or "log" (default: "uniform").
+            num_thresholds (int, optional): Number of candidate thresholds to sweep (default: 1000).
+            greater_is_better (bool, optional): Whether greater metric values are better (default: True).
+
+        Returns:
+            dict: The result of ``find_best_threshold`` -- ``threshold_opt``,
+                ``metric_max``, ``thresholds``, ``metrics``.
+        """
+        if metric_fn is None:
+            metric_fn = MCC
+
+        if x_val is None or y_val is None:
+            x_val, y_val = self.data_module.data_val
+
+        y_pred_val = self.model_module._get_predictions(x_val)
+        incorrect_val = (y_pred_val != y_val).astype(int)
+        statistics_val = self.predict(x_val, y_pred_val)
+
+        # Methods that mark some classes "unreliable" (e.g. SPARDACUS) return
+        # NaN statistics for them -- drop those samples before sweeping.
+        if hasattr(self, "remove_nan_values"):
+            statistics_val, incorrect_val = self.remove_nan_values(statistics_val, incorrect_val)
+
+        result = self.find_best_threshold(
+            y_true=incorrect_val,
+            y_probs=statistics_val,
+            metric_fn=metric_fn,
+            search=search,
+            num_thresholds=num_thresholds,
+            greater_is_better=greater_is_better,
+        )
+        self.threshold = result["threshold_opt"]
+
+        return result
 
     def roc_curve(self, y_true: np.ndarray, y_pred: np.ndarray) -> dict:
         """
@@ -272,7 +334,7 @@ class SafetyCage(ABC):
             path (str or Path): File path to save to (should end in .joblib).
 
         Raises:
-            ValueError: If the cage has not been trained (alpha not set).
+            ValueError: If the cage has not been trained (threshold not set).
         """
         if getattr(self, "threshold", None) is None:
             raise ValueError("Cannot save: cage has not been trained (threshold is not set).")
