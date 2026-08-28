@@ -15,8 +15,8 @@ def _repo_root() -> Path:
 def flatten_metrics(prefix: str, metrics: dict) -> dict:
     """Flatten a ``{"metric name": value}`` dict into dataframe-friendly columns.
 
-    ``{"precision (macro)": 0.9}`` with ``prefix="baseline"`` becomes
-    ``{"baseline_precision_macro": 0.9}`` -- nested dicts survive a JSON
+    ``{"precision (macro)": 0.9}`` with ``prefix="no_cage"`` becomes
+    ``{"no_cage_precision_macro": 0.9}`` -- nested dicts survive a JSON
     round-trip fine, but turn into object columns in a dataframe instead of
     one column per metric.
     """
