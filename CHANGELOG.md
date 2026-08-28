@@ -1,5 +1,71 @@
 # Changelog
 
+## v0.0.63 (28/08/2026)
+
+### Breaking
+
+- `SafetyCage.train_cage()` renamed to `fit()` across the base class and
+  every method (MSP, DOCTOR, RED, SPARDACUS, Mahalanobis, RandomBaseline).
+  Callers need to switch `cage.train_cage()` to `cage.fit()`.
+- `RED` and `SPARDACUS` each carried their own `alpha` attribute, separate
+  from the base class's `threshold` — `flag(alpha=...)`, `self.alpha`, and
+  a `find_best_threshold()` override on `RED` that renamed its result key
+  from `threshold_opt` to `alpha_opt`. All of that is gone: both methods
+  now use `self.threshold` like every other method, and `RED.flag()` /
+  `RED.find_best_threshold()` are fully inherited from the base class.
+  Anyone setting `cage.alpha`, calling `cage.flag(alpha=...)`, or reading
+  `result["alpha_opt"]` needs to switch to `threshold`. `RED.save_cage()` /
+  `load_cage()` now persist `threshold`, not `alpha` — cages saved by
+  earlier versions need to be re-fitted and saved again.
+
+### Feature
+
+- `SafetyCage.fit_threshold()`: runs the predict → `find_best_threshold()`
+  pipeline every example notebook was writing by hand against the
+  validation split, and sets `self.threshold`. Every `fit()` gained
+  matching opt-in keyword arguments (`find_threshold=False`, `metric_fn`,
+  `x_val`, `y_val`, `search`, `num_thresholds`, `greater_is_better`) that
+  route into it, so `cage.fit(find_threshold=True)` trains and picks a
+  threshold in one call. Default behavior (`find_threshold=False`) is
+  unchanged, and `find_best_threshold()` remains fully usable on its own.
+- `safetycage.methods.random_baseline.RandomBaseline`: a misclassification
+  baseline that flags samples at random, weighted by how often the model
+  is wrong on the predicted class (learned in `fit()`, from the training
+  split). Lets other methods be judged against a chance-adjusted baseline
+  at the same review budget, rather than only against a do-nothing
+  baseline.
+- `examples/03-cifar10-cnn`: added a "confusion matrix as a graph" section
+  (treats the confusion matrix as a directed adjacency matrix and
+  visualizes it with networkx/nxviz), a `RandomBaseline` comparison
+  alongside the real cage in both deployment scenarios, and a
+  gain-per-review metric — `(with-review metric − no-cage metric) /
+  fraction flagged` — that normalizes a method's payoff by its review
+  cost, so methods that flag very different fractions of the test set can
+  be compared on equal footing.
+- New `experiments/` module: systematic sweeps across (dataset, model)
+  pipelines and safety cage methods, complementing `examples/`'s one
+  guided walkthrough per notebook. `python -m experiments.run --pipeline
+  <name> --safetycage <name>` fits and evaluates any registered
+  combination, with `--retrain` (train a fresh model from scratch instead
+  of loading its checkpoint) and `--cage-kwargs` (JSON constructor
+  overrides, e.g. RED's `training_iterations`) for per-run tuning. Results
+  are upserted into `experiments/results.json`, summarized to
+  `experiments/compare.md`, and every invocation is logged to
+  `experiments/logs/`.
+
+### Fix
+
+- `find_best_threshold()` now casts `threshold_opt` and `metric_max` to
+  native `float`. Previously, a `float32` statistic array — RED's, for
+  instance — could produce a `threshold_opt` of type `np.float32`, which
+  (unlike `np.float64`) is not a subclass of Python's `float`; RED's own
+  `find_best_threshold()` override happened to mask this by casting its
+  renamed `alpha_opt` explicitly, which is gone now that the override is.
+- `docs/how-it-works.md` and `paper/paper.md` still showed `train_cage()`
+  and a `result["alpha_opt"]` / `cage.find_best_threshold_flag()` API that
+  no longer exists (the latter never existed under that name). Updated to
+  the current `fit()` / `threshold_opt` API.
+
 ## v0.0.62 (19/08/2026)
 
 ### Feature
