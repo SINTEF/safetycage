@@ -97,7 +97,7 @@ A special thank you goes to previous co-authors of the methods we have built, Fi
 <!-- unsure how to cite these people -->
 
 ## License
-This project is licensed under the MIT License - see the [LICENSE](LICENSE) file for details.
+This project is licensed under the Apache License 2.0 - see the [LICENSE](LICENSE) file for details.
 
 ## Project status
 Active and under development!

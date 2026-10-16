@@ -1,5 +1,14 @@
 # Changelog
 
+## v0.0.64 (16/10/2026)
+
+### License
+
+- Relicensed from MIT to the Apache License 2.0. `LICENSE` now holds the
+  full Apache 2.0 text, and the copyright notice moved to a new `NOTICE`
+  file, which ships in the wheel alongside `LICENSE`. Releases up to and
+  including v0.0.63 remain available under MIT.
+
 ## v0.0.63 (28/08/2026)
 
 ### Breaking

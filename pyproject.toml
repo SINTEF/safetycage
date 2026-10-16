@@ -16,8 +16,8 @@ classifiers = [
     "Programming Language :: Python :: 3",
     "Operating System :: OS Independent",
 ]
-license = "MIT"
-license-files = ["LICEN[CS]E*"]
+license = "Apache-2.0"
+license-files = ["LICEN[CS]E*", "NOTICE"]
 requires-python = ">=3.13"
 
 dependencies = [
