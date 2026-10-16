@@ -2,6 +2,7 @@ from tqdm import tqdm
 import numpy as np
 from scipy.stats import cauchy, combine_pvalues
 from sklearn.mixture import GaussianMixture
+from sklearn.model_selection import KFold
 from statsmodels.distributions.empirical_distribution import ECDF
 import warnings
 from pathlib import Path
@@ -88,9 +89,9 @@ class SPARDACUS(SafetyCage):
             data_module: Reference to data module object for handling data.
             s_statistic_source (str, optional): Source used to compute p-values ("correctly" or "incorrectly"). (default: "correctly")
             threshold (float): Significance threshold for flagging samples.
-            test_type_between_layers (str): Method for combining p-values ("fisher" or "cauchy").
+            test_type_between_layers (str, optional): Method for combining p-values ("fisher" or "cauchy"). (default: "cauchy", as in the paper)
             cauchy_weights_per_layer (list[float]): Weights for the Cauchy combination test.
-            minimum_sample_size (int, optional): Minimum number of samples required to fit density models. (default: 10)
+            minimum_sample_size (int, optional): Minimum number of samples required to fit density models. (default: 3)
             pvalue_method (str, optional): "monte_carlo" builds the ECDF from draws of the fitted Gaussian
                 mixture, as in the paper; "conformal" uses held-out calibration samples instead. (default: "monte_carlo")
             calibration_fraction (float, optional): Share of the reference samples (correct ones for
@@ -103,13 +104,15 @@ class SPARDACUS(SafetyCage):
         if self.s_statistic_source not in ("correctly", "incorrectly"):
             raise ValueError(f"s_statistic_source must be \"correctly\" or \"incorrectly\". Provided: {self.s_statistic_source!r}")
         self.cauchy_weights_per_layer = kwargs.get("cauchy_weights_per_layer")
-        self.test_type_between_layers = kwargs.get("test_type_between_layers")
+        self.test_type_between_layers = kwargs.get("test_type_between_layers", "cauchy")
 
         # For the Gaussian Mixture Model fitting: classes with fewer samples are flagged as unreliable
-        # (see _fit_gaussian_mixture). Must be at least 3, as fewer points cannot support a meaningful fit. Default value is 10.
+        # (see _fit_gaussian_mixture). Must be at least 3, as fewer points cannot support a meaningful fit.
+        # The default is that floor: accurate models often leave only a handful of incorrect samples per
+        # class (MNIST: 2-9 for most classes), and a single Gaussian fitted to them still ranks mistakes well.
         if "minimum_sample_size" in kwargs and kwargs["minimum_sample_size"] < 3:
             raise ValueError(f"Minimum_sample_size must be at least 3. Provided: {kwargs['minimum_sample_size']}")
-        self.minimum_sample_size = kwargs.get("minimum_sample_size", 10)
+        self.minimum_sample_size = kwargs.get("minimum_sample_size", 3)
 
         self.pvalue_method = kwargs.get("pvalue_method", "monte_carlo")
         if self.pvalue_method not in ("monte_carlo", "conformal"):
@@ -147,9 +150,9 @@ class SPARDACUS(SafetyCage):
         new samples during prediction.
 
         Args:
-            x: Tuple of (x_correct, x_incorrect) input data
-            y: Tuple of (y_correct, y_incorrect) labels
-            y_pred: Model predictions
+            x: Input data. If None, the training data is loaded from the data module.
+            y: True labels for x. Required when x is given.
+            y_pred: Model predictions. If None, computed using the model module.
             find_threshold (bool, optional): If True, also choose ``self.threshold``
                 on validation data after fitting -- see ``SafetyCage.fit_threshold``
                 for what the remaining keyword arguments do. (default: False)
@@ -163,8 +166,8 @@ class SPARDACUS(SafetyCage):
 
         if x is None:
             x, y = self.data_module.data_train
-        if y is None:
-            _, y = self.data_module.data_train
+        elif y is None:
+            raise ValueError("y must be given together with x: the training labels belong to other samples.")
         if y_pred is None:
             y_pred = self.model_module._get_predictions(x)
 
@@ -371,27 +374,29 @@ class SPARDACUS(SafetyCage):
         return activations[order[n_calibration:]], activations[order[:n_calibration]]
 
 
-    def _conformal_pvalue(self, calibration_scores: np.ndarray, statistic: float) -> float:
+    def _empirical_pvalue(self, reference_scores: np.ndarray, statistic: float) -> float:
         """
-        Conformal p-value of a statistic against sorted held-out calibration scores.
+        Empirical p-value of a statistic against sorted reference scores: the held-out
+        calibration scores (pvalue_method="conformal") or the Monte Carlo draws
+        (pvalue_method="monte_carlo").
 
-        For s_statistic_source="correctly" (right-sided), counts calibration scores >= statistic;
+        For s_statistic_source="correctly" (right-sided), counts reference scores >= statistic;
         for "incorrectly" (left-sided), counts scores <= statistic. The +1 in numerator and
         denominator counts the new sample itself, so the p-value is never 0 and, for samples
-        drawn like the calibration ones, P(p <= alpha) <= alpha.
+        drawn like the reference ones, P(p <= alpha) <= alpha.
 
         Args:
-            calibration_scores (numpy.ndarray): Sorted statistics of the held-out samples
+            reference_scores (numpy.ndarray): Sorted reference statistics
             statistic (float): Statistic of the new sample
 
         Returns:
             float: p-value in [1 / (n + 1), 1]
         """
-        n = len(calibration_scores)
+        n = len(reference_scores)
         if self.s_statistic_source == "correctly":
-            count = n - np.searchsorted(calibration_scores, statistic, side="left")
+            count = n - np.searchsorted(reference_scores, statistic, side="left")
         else:
-            count = np.searchsorted(calibration_scores, statistic, side="right")
+            count = np.searchsorted(reference_scores, statistic, side="right")
         return (1 + count) / (n + 1)
 
 
@@ -402,11 +407,11 @@ class SPARDACUS(SafetyCage):
         The number of components (1-3) is chosen by the lowest BIC, with every
         candidate fitted on all samples. BIC already penalizes extra components,
         so no cross-validation split is needed. To keep fits stable, a component
-        is only allowed for every GMM_SAMPLES_PER_COMPONENT samples: 10-19 samples
-        give a single Gaussian, 20-29 up to two, and 30 or more up to three.
+        is only allowed for every GMM_SAMPLES_PER_COMPONENT samples: fewer than 20
+        samples give a single Gaussian, 20-29 up to two, and 30 or more up to three.
 
-        **WARNING:** With fewer than minimum_sample_size samples (often too few incorrect
-        samples for well-performing models), no model is fitted: a warning is raised,
+        **WARNING:** With fewer than minimum_sample_size samples (default 3; this happens
+        when a well-performing model makes almost no mistakes for a class), no model is fitted: a warning is raised,
         the class is added to self.unreliable_classes, and None is returned. In such
         cases, we recommend using a different safetycage method or ensuring enough
         correct and incorrect samples exist for each class.
@@ -500,7 +505,9 @@ class SPARDACUS(SafetyCage):
         Compute p-values for each sample and layer based on the fitted density estimators and ECDFs.
 
         Evaluates how likely each sample is under the correct and incorrect distributions.
-        Samples belonging to unreliable classes are assigned NaN values.
+        Samples predicted as an unreliable class cannot be scored; they get the most
+        suspicious p-value (0 for s_statistic_source="correctly", 1 for "incorrectly")
+        so they are always flagged for review and stay in the metrics.
 
         Args:
             x: Input data samples
@@ -522,21 +529,27 @@ class SPARDACUS(SafetyCage):
         
         activations = self.model_module._get_activations(x)
 
+        # Most suspicious p-value, given to samples that cannot be scored
+        unscored_pvalue = 0.0 if self.s_statistic_source == "correctly" else 1.0
+
+        predicted = np.argmax(y, axis=1) if self.model_module.use_onehot_encoder else np.asarray(y)
+        unseen = sorted(set(predicted.tolist()) - set(self.classes))
+        if unseen:
+            warnings.warn(f"Samples predicted as the classes {unseen} cannot be scored, as these classes were not seen in the training data. "
+                        f"They get the most suspicious p-value ({unscored_pvalue}) so they are always flagged.")
+
         if self.unreliable_classes:
-            warnings.warn(f"The p-value for the classes {self.unreliable_classes} have been set to NaN due to insufficient data to fit the Gaussian Mixture Models. "
-                        f"Consider using a different safetycage method.")
+            warnings.warn(f"Samples predicted as the classes {self.unreliable_classes} cannot be scored, due to insufficient data to fit the Gaussian Mixture Models. "
+                        f"They get the most suspicious p-value ({unscored_pvalue}) so they are always flagged. Consider using a different safetycage method.")
         
         for layer_index, layer in enumerate(selected_layers): # for all layers
             for sample_index, y_sample, in enumerate(y): # for all predictions to be tested
                 
                 # Compute p-values of each sample per layer using ECDF function
-                if self.model_module.use_onehot_encoder:
-                    class_label = self.classes[np.argmax(y_sample)]
-                else:
-                    class_label = self.classes[y_sample]
-                
-                if class_label in self.unreliable_classes:
-                    pvalue[sample_index,layer_index] = np.nan
+                class_label = self.classes.get(predicted[sample_index])
+
+                if class_label is None or class_label in self.unreliable_classes:
+                    pvalue[sample_index,layer_index] = unscored_pvalue
                     continue
 
                 ## Get the projection vector beta hat and the actication for the sample
@@ -562,19 +575,15 @@ class SPARDACUS(SafetyCage):
                 ecdf_incorrect = self.layer_params[layer][class_label]["ecdf_incorrect"]
                 
                 if self.pvalue_method == "conformal":
-                    pvalue[sample_index,layer_index] = self._conformal_pvalue(
-                        self.layer_params[layer][class_label]["calibration_scores"], statistic[0]
-                    )
+                    reference_scores = self.layer_params[layer][class_label]["calibration_scores"]
+                else:
+                    # The ECDF stores the sorted Monte Carlo scores after a leading -inf
+                    ecdf = ecdf_correct if self.s_statistic_source == "correctly" else ecdf_incorrect
+                    reference_scores = ecdf.x[1:]
 
-                elif self.s_statistic_source == "correctly":
-                    # Right-sided test. Small p-value indicates sample is incorrectly classfied
-                    # ecdf_correct(statistic) returns a shape-(1,) array; numpy 2.x no longer
-                    # allows assigning that into a scalar slot, so extract the scalar first.
-                    pvalue[sample_index,layer_index] = (1 - ecdf_correct(statistic))[0]
-
-                elif self.s_statistic_source == "incorrectly":
-                    # Left-sided test. Small p-value indicates sample is correctly classified.
-                    pvalue[sample_index,layer_index] = ecdf_incorrect(statistic)[0]
+                # Right-sided for "correctly" (small p-value: likely misclassified), left-sided for
+                # "incorrectly" (small p-value: likely correct). The +1 keeps p-values above 0.
+                pvalue[sample_index,layer_index] = self._empirical_pvalue(reference_scores, statistic[0])
                     
         return pvalue
 
@@ -634,7 +643,8 @@ class SPARDACUS(SafetyCage):
             threshold (float): Threshold for flagging samples
 
         Returns:
-            numpy.ndarray: Boolean array indicating flagged samples with NaNs preserved for missing statistics.
+            numpy.ndarray: Boolean array indicating flagged samples. A NaN statistic (a sample
+            that could not be scored) is always flagged.
         """
         # Check priority of threshold parameter
         if threshold is None:
@@ -651,9 +661,10 @@ class SPARDACUS(SafetyCage):
 
         # Small p-value indicates sample is correctly classified. Make sure flag = 1 means prediction is deemed to be wrong
         elif self.s_statistic_source == "incorrectly":
-            flags = ~(statistics <= threshold)
+            flags = statistics > threshold
 
-        return flags
+        # A sample that could not be scored goes to review under either setting
+        return flags | np.isnan(statistics)
     
     def remove_nan_values(self, statistics, y_true) -> tuple[np.ndarray, np.ndarray]:
         """
@@ -748,16 +759,24 @@ class SPARDACUS(SafetyCage):
 
         Args:
             p_values (numpy.ndarray): P-values to combine.
-            weights (numpy.ndarray, optional): Weights for each p-value. (default: None).
+            weights (numpy.ndarray, optional): Non-negative weights, one per p-value. They are
+                rescaled to sum to 1, as the test requires, so e.g. [1, 3] means [0.25, 0.75]. (default: None).
 
         Returns:
             float: Combined p-value.
         """
+        p_values = np.asarray(p_values, dtype=float)
 
         # If weights is None, put equal weight to each p-value:
         if weights is None or len(weights) == 0:
-            weights = np.ones(len(p_values))/len(p_values)
+            weights = np.ones(len(p_values))
         weights = np.asarray(weights, dtype=float)
+
+        if weights.shape != p_values.shape:
+            raise ValueError(f"Expected one Cauchy weight per p-value ({len(p_values)}), got {len(weights)}.")
+        if np.any(weights < 0) or weights.sum() == 0:
+            raise ValueError(f"Cauchy weights must be non-negative and not all zero. Provided: {weights.tolist()}")
+        weights = weights / weights.sum()
 
         # Compute Cauchy statistic:
         C = np.sum(weights*np.tan((0.5-p_values)*np.pi))
@@ -765,7 +784,8 @@ class SPARDACUS(SafetyCage):
         # If p-value are uniformly distributed, C has a standard Cauchy distribution
         # Small p-values indicate discrepancies from H_0, which will give large C.
         # Compute one-sided right-tailed p-value:
-        p_value_combined_cauchy = 1 - cauchy.cdf(C, loc=0, scale=1)
+        # (survival function: 1 - cdf without losing precision for large C)
+        p_value_combined_cauchy = cauchy.sf(C, loc=0, scale=1)
 
         return(p_value_combined_cauchy)
 
@@ -780,7 +800,15 @@ class SPARDACUS(SafetyCage):
         Args:
             X_samples (numpy.ndarray): First set of samples.
             Y_samples (numpy.ndarray): Second set of samples.
-            **kwargs: Optional parameters controlling optimization and cross-validation.
+            **kwargs: Optional parameters controlling optimization and cross-validation:
+                lambdas (list[float]): l1 penalties on the projection. One value is used as is;
+                    several are chosen between by cross-validation (see _cross_validate_lambda).
+                    (default: [0], no penalty, as in the SPARDACUS paper)
+                num_folds (int): Number of cross-validation folds when several lambdas are given. (default: 5)
+                max_iter (int): Maximum number of hill-climbing iterations. (default: 1000)
+                eps (float): Minimum improvement required to continue. (default: 1e-8)
+                learning_rate (float): Base learning rate. (default: 1)
+                print_update (int): Print progress every print_update iterations; 0 disables printing. (default: 0)
 
         Returns:
             tuple: Projection vector, Wasserstein distance, optimization cost, and best lambda value.
@@ -797,7 +825,7 @@ class SPARDACUS(SafetyCage):
         max_iter_default = 1000
         eps_default = 1e-8
         learning_rate_default = 1
-        print_update_default = 100
+        print_update_default = 0  # progress printing is opt-in: pass print_update=N to print every N iterations
 
         lambdas = kwargs.get('lambdas', lambdas_default)
         num_folds = kwargs.get('num_folds', num_folds_default)
@@ -806,75 +834,90 @@ class SPARDACUS(SafetyCage):
         learning_rate = kwargs.get('learning_rate', learning_rate_default)
         print_update = kwargs.get('print_update', print_update_default)
 
+        if len(lambdas) == 0:
+            raise ValueError('lambdas not correctly formatted')
+
         if X_samples.shape[0] < Y_samples.shape[0]:#ensure n >= m with dim(X)=n,dim(y)=m by swapping
             X_samples, Y_samples = Y_samples, X_samples
 
-        n, d = X_samples.shape
-        m = Y_samples.shape[0]
+        # Starting direction: the best of random directions and the coordinate axes
+        prev_beta, _, _ = SPARDACUS.randomProjectionSearch(X_samples, Y_samples, max_iter=max(100, int(np.ceil(max_iter / 10))))
 
-        x_foldsize = n // num_folds
-        y_foldsize = m // num_folds
-        prev_beta = np.zeros(d)
-        prev_beta[0] = 0.5
-
-        if len(lambdas) > 1:
-            lambdas = sorted(lambdas)
-            lambda_scores = np.zeros(len(lambdas))
-            first_beta, first_cost = SPARDACUS.l1SPARDA(X_samples, Y_samples, 0, max_iter, eps, learning_rate, print_update, prev_beta)
-
-            for fold in range(1, num_folds + 1):
-
-                x_foldindex = (fold-1) * x_foldsize + 1
-                y_foldindex = (fold-1) * y_foldsize + 1
-                if fold < num_folds:
-                    xs_test = X_samples[x_foldindex:(x_foldindex+x_foldsize-1),:]
-                    xs_train = X_samples[1:(x_foldindex-1) (x_foldindex+x_foldsize):n]
-                    ys_test = Y_samples[y_foldindex:(y_foldindex+y_foldsize-1),:]
-                    ys_train = Y_samples[1:(y_foldindex-1) (y_foldindex+y_foldsize):m]
-                else:
-                    xs_test = X_samples[x_foldindex:n,:]
-                    xs_train = X_samples[1:(x_foldindex-1),:]
-                    ys_test = Y_samples[y_foldindex:m,:]
-                    ys_train = Y_samples[1:(y_foldindex-1),:]
-
-
-
-                prev_beta = first_beta
-                for l in range(len(lambdas)):
-                    lambda_val = lambdas[l]
-                    beta, cost = SPARDACUS.l1SPARDA(xs_train, ys_train, lambda_val, max_iter, eps, learning_rate, print_update, prev_beta)
-
-                    if np.linalg.norm(beta) > 0:
-                        prev_beta = beta / np.linalg.norm(beta)
-
-                    heldout_wass = SPARDACUS.projectedWasserstein(xs_test, ys_test, beta)
-                    lambda_scores[l] += heldout_wass
-
-                    cardinality = np.sum(np.abs(beta) > 0)
-
-                    if print_update < np.inf:
-                        print(f'lambda: {lambda_val}  fold: {fold}')
-                        print(f'training cost: {cost}')
-                        print(f'heldout cost: {heldout_wass}')
-                        print(f'projection cardinality: {cardinality}')
-
-                    if cardinality < 2:
-                        break
-
-            lambda_scores /= num_folds
-            best_indices = np.where(lambda_scores == np.max(lambda_scores))[0]
-            best_lambda = lambdas[best_indices[0]]
-        elif len(lambdas) == 1:
+        if len(lambdas) == 1:
             best_lambda = lambdas[0]
-            prev_beta, _, _ = SPARDACUS.randomProjectionSearch(X_samples, Y_samples, max_iter=max(100, int(np.ceil(max_iter / 10))))
         else:
-            raise ValueError('lambdas not correctly formatted')
+            best_lambda, prev_beta = SPARDACUS._cross_validate_lambda(
+                X_samples, Y_samples, lambdas, num_folds, prev_beta, max_iter, eps, learning_rate, print_update
+            )
 
         beta_hat, cost = SPARDACUS.l1SPARDA(X_samples, Y_samples, best_lambda, max_iter, eps, learning_rate, print_update, prev_beta)
-        beta_hat = beta_hat/np.linalg.norm(beta_hat) # always re-scale to unit norm.
+        beta_norm = np.linalg.norm(beta_hat)
+        if beta_norm == 0:
+            raise ValueError(f"lambda={best_lambda} shrank the projection to zero; use smaller lambdas.")
+        beta_hat = beta_hat/beta_norm # always re-scale to unit norm.
         wass_dist = SPARDACUS.projectedWasserstein(X_samples, Y_samples, beta_hat)
 
         return beta_hat, wass_dist, cost, best_lambda
+
+    @staticmethod
+    def _cross_validate_lambda(X_samples, Y_samples, lambdas, num_folds, start_beta, max_iter, eps, learning_rate, print_update):
+        """
+        Choose the l1 penalty lambda for fastSPARDA by K-fold cross-validation.
+
+        Both sample sets are split into num_folds shuffled folds. For each fold, the projection
+        is fitted on the other folds for every lambda in increasing order, each fit warm-started
+        from the previous one, and scored by the projected Wasserstein distance on the held-out
+        fold. The score uses the unit-length direction, so larger penalties (which also shrink
+        beta) are judged on the direction they find, not marked down for being shorter. Once a
+        projection uses fewer than two features, larger lambdas are skipped for that fold, as
+        they can only be sparser. The lambda with the highest average held-out distance wins.
+
+        Args:
+            X_samples (numpy.ndarray): Larger set of samples.
+            Y_samples (numpy.ndarray): Smaller set of samples.
+            lambdas (list[float]): Candidate l1 penalties.
+            num_folds (int): Number of folds.
+            start_beta (numpy.ndarray): Starting direction.
+            max_iter, eps, learning_rate, print_update: Passed on to l1SPARDA.
+
+        Returns:
+            tuple: (best lambda, unpenalised full-data direction to warm-start the final fit)
+        """
+        lambdas = sorted(lambdas)
+        if len(Y_samples) < num_folds:
+            raise ValueError(f"Cross-validating lambdas needs at least num_folds={num_folds} samples in each set; the smaller set has {len(Y_samples)}.")
+
+        # Unpenalised solution on all samples: warm start for every fold and for the final fit
+        first_beta, _ = SPARDACUS.l1SPARDA(X_samples, Y_samples, 0, max_iter, eps, learning_rate, print_update, start_beta)
+
+        x_folds = KFold(n_splits=num_folds, shuffle=True).split(X_samples)
+        y_folds = KFold(n_splits=num_folds, shuffle=True).split(Y_samples)
+        lambda_scores = np.zeros(len(lambdas))
+
+        for fold, ((x_train, x_test), (y_train, y_test)) in enumerate(zip(x_folds, y_folds), start=1):
+            prev_beta = first_beta
+            for index, lambda_val in enumerate(lambdas):
+                beta, cost = SPARDACUS.l1SPARDA(X_samples[x_train], Y_samples[y_train], lambda_val, max_iter, eps, learning_rate, print_update, prev_beta)
+                beta_norm = np.linalg.norm(beta)
+                if beta_norm == 0:
+                    break
+                prev_beta = beta / beta_norm
+
+                heldout_wass = SPARDACUS.projectedWasserstein(X_samples[x_test], Y_samples[y_test], prev_beta)
+                lambda_scores[index] += heldout_wass
+                cardinality = np.sum(np.abs(beta) > 0)
+
+                if print_update > 0:
+                    print(f'lambda: {lambda_val}  fold: {fold}')
+                    print(f'training cost: {cost}')
+                    print(f'heldout cost: {heldout_wass}')
+                    print(f'projection cardinality: {cardinality}')
+
+                if cardinality < 2:
+                    break
+
+        lambda_scores /= num_folds
+        return lambdas[int(np.argmax(lambda_scores))], first_beta
 
     @staticmethod
     def l1SPARDA(xs, ys, _lambda, max_iter, eps, learning_rate, print_update, beta0=None):
@@ -891,7 +934,7 @@ class SPARDACUS(SafetyCage):
             max_iter (int): Maximum number of iterations.
             eps (float): Minimum improvement required to continue.
             learning_rate (float): Base learning rate.
-            print_update (int): Frequency of progress updates.
+            print_update (int): Print progress every print_update iterations; 0 disables printing.
             beta0 (numpy.ndarray, optional): Initial projection vector. (default: None).
 
         Returns:
@@ -991,7 +1034,11 @@ class SPARDACUS(SafetyCage):
                 break
 
         if iter_val >= max_iter:
-            print('fastSPARDA optimization failed to converge (likely max_iter or learning_rate is too small)')
+            warnings.warn(
+                f"fastSPARDA optimization stopped after max_iter={max_iter} iterations without converging "
+                "(likely max_iter or learning_rate is too small); the projection may be slightly suboptimal.",
+                UserWarning
+            )
 
         return beta, cost
 
@@ -1091,6 +1138,3 @@ class SPARDACUS(SafetyCage):
 
         return np.sum(diffs ** 2 * widths) / (n * m)
 
-
-if __name__ == "__main__":
-    SPARDACUS(None, None, None)

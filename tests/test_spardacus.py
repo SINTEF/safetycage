@@ -56,7 +56,7 @@ def separable_cage():
     """Two classes, well-separated correct/incorrect activation clusters.
 
     20 samples per (true_class, correct/incorrect) bucket -- comfortably
-    above SPARDACUS's default minimum_sample_size=10 for GMM fitting.
+    above SPARDACUS's default minimum_sample_size=3 for GMM fitting.
     """
     rng = np.random.RandomState(0)
     n_per_bucket = 20
@@ -266,7 +266,7 @@ def test_gmm_with_too_few_samples_marks_class_unreliable(separable_cage):
     spardacus = SPARDACUS(model_module, data_module)
 
     with pytest.warns(UserWarning, match="unreliable"):
-        density = spardacus._fit_gaussian_mixture(_bimodal(9), "incorrect", "aspen")
+        density = spardacus._fit_gaussian_mixture(_bimodal(2), "incorrect", "aspen")
 
     assert density is None
     assert "aspen" in spardacus.unreliable_classes
@@ -286,6 +286,8 @@ def test_gmm_components_are_capped_by_sample_size(separable_cage, n_samples, max
 
 
 def test_gmm_picks_components_by_bic_on_all_samples(separable_cage):
+    """Every candidate sees all samples, so sorted two-humped data is fitted
+    with two components (an unshuffled 2-fold split put one hump in each half)."""
     model_module, data_module, _, _ = separable_cage
     spardacus = SPARDACUS(model_module, data_module)
 
@@ -316,7 +318,7 @@ def test_conformal_pvalue_counts_calibration_scores(separable_cage, source, expe
     model_module, data_module, _, _ = separable_cage
     spardacus = SPARDACUS(model_module, data_module, s_statistic_source=source, pvalue_method="conformal")
 
-    assert spardacus._conformal_pvalue(np.array([1.0, 2.0, 3.0, 4.0]), 3.0) == pytest.approx(expected)
+    assert spardacus._empirical_pvalue(np.array([1.0, 2.0, 3.0, 4.0]), 3.0) == pytest.approx(expected)
 
 
 @pytest.fixture
@@ -432,3 +434,206 @@ def test_load_cage_without_saved_settings_warns_and_uses_defaults(separable_cage
     assert loaded.s_statistic_source == "correctly"
     assert loaded.pvalue_method == "monte_carlo"
     assert np.all(np.isfinite(loaded.predict(x_indices, y_true)))
+
+
+def test_fastsparda_does_not_print_progress_by_default(monkeypatch):
+    """Progress printing flooded notebooks once the optimizer ran its full
+    iterations; it is now off unless print_update is passed."""
+    seen = []
+    original = SPARDACUS.l1SPARDA
+
+    def spy(xs, ys, _lambda, max_iter, eps, learning_rate, print_update, beta0=None):
+        seen.append(print_update)
+        return original(xs, ys, _lambda, max_iter, eps, learning_rate, print_update, beta0)
+
+    monkeypatch.setattr(SPARDACUS, "l1SPARDA", staticmethod(spy))
+    xs, ys = _relu_activations(seed=0)
+    np.random.seed(0)
+    SPARDACUS.fastSPARDA(xs, ys)
+
+    assert seen == [0]
+
+
+def test_l1sparda_warns_instead_of_printing_when_not_converged(capsys):
+    xs, ys = _relu_activations(seed=0)
+    beta0 = np.ones(xs.shape[1]) / np.sqrt(xs.shape[1])
+
+    with pytest.warns(UserWarning, match="without converging"):
+        SPARDACUS.l1SPARDA(xs, ys, 0, 1, 1e-8, 1, 0, beta0)
+
+    assert capsys.readouterr().out == ""
+
+
+def _cage_with_unreliable_class():
+    """Class 0 has 20 incorrect training samples; class 1 only 2, below the
+    default minimum_sample_size of 3, so class "1" is marked unreliable."""
+    rng = np.random.RandomState(0)
+    activations, y_true, predictions = [], [], []
+    for pred_class, n_incorrect in ((0, 20), (1, 2)):
+        for correct, n, center in ((True, 20, 0.0), (False, n_incorrect, 5.0)):
+            for _ in range(n):
+                activations.append(rng.normal(center, 0.5, 5))
+                predictions.append(pred_class)
+                y_true.append(pred_class if correct else 1 - pred_class)
+    predictions = np.array(predictions)
+    model_module = MockModelModule(np.array(activations), predictions)
+    data_module = MockDataModule(np.arange(len(predictions)), np.array(y_true), num_classes=2)
+    return model_module, data_module, np.arange(len(predictions)), predictions
+
+
+@pytest.mark.parametrize("source, expected", [("correctly", 0.0), ("incorrectly", 1.0)])
+def test_unreliable_class_gets_most_suspicious_pvalue_and_is_flagged(source, expected):
+    """Samples the cage cannot score get the most suspicious p-value instead
+    of NaN, so they are flagged (sent to a person) under both settings and
+    stay in the metrics."""
+    model_module, data_module, x, y_pred = _cage_with_unreliable_class()
+    spardacus = SPARDACUS(model_module, data_module, s_statistic_source=source)
+    spardacus.fit()
+    assert spardacus.unreliable_classes == {"1"}
+
+    pvalues = spardacus.predict(x, y_pred)
+
+    assert not np.isnan(pvalues).any()
+    np.testing.assert_array_equal(pvalues[y_pred == 1], expected)
+    assert spardacus.flag(pvalues, threshold=0.05)[y_pred == 1].all()
+
+
+@pytest.mark.parametrize("source", ["correctly", "incorrectly"])
+def test_flag_treats_nan_as_flagged(separable_cage, source):
+    model_module, data_module, _, _ = separable_cage
+    spardacus = SPARDACUS(model_module, data_module, s_statistic_source=source)
+
+    assert spardacus.flag(np.array([np.nan]), threshold=0.05)[0]
+
+
+def test_cauchy_combination_normalises_weights():
+    p_values = np.array([0.1, 0.4])
+
+    assert SPARDACUS.CauchyCombinationTest(p_values, [1.0, 3.0]) == pytest.approx(
+        SPARDACUS.CauchyCombinationTest(p_values, [0.25, 0.75])
+    )
+
+
+@pytest.mark.parametrize("weights", [[0.5, -0.5], [0.0, 0.0], [1.0, 1.0, 1.0]])
+def test_cauchy_combination_rejects_invalid_weights(weights):
+    with pytest.raises(ValueError):
+        SPARDACUS.CauchyCombinationTest(np.array([0.1, 0.4]), weights)
+
+
+def test_monte_carlo_pvalues_are_never_zero(separable_cage):
+    """A score more extreme than every Monte Carlo draw gets 1 / (Q + 1), not 0,
+    so combining layers with Fisher or Cauchy stays finite."""
+    from statsmodels.distributions.empirical_distribution import ECDF
+
+    class FixedScore:
+        def __init__(self, value):
+            self.value = value
+
+        def score_samples(self, x):
+            return np.full(len(x), self.value)
+
+    model_module, data_module, _, _ = separable_cage
+    spardacus = SPARDACUS(model_module, data_module)
+    spardacus.fit()
+    params = spardacus.layer_params["layer1"]["0"]
+    params["ecdf_correct"] = ECDF(np.linspace(0.0, 5.0, 1000))   # Q = 1000 draws, all below 10
+    params["density_incorrect"], params["density_correct"] = FixedScore(10.0), FixedScore(0.0)
+
+    pvalue = spardacus.predict(np.array([0]), np.array([0]))
+
+    assert pvalue[0] == pytest.approx(1 / 1001)
+
+
+def test_fastsparda_cross_validates_lambdas():
+    """Only the first feature differs between the two samples; the
+    cross-validated search returns a unit direction along it and one of the
+    given lambdas."""
+    rng = np.random.default_rng(0)
+    xs = rng.normal(size=(200, 6))
+    ys = rng.normal(size=(100, 6))
+    ys[:, 0] += 3.0
+    lambdas = [0, 0.01, 0.1]
+
+    np.random.seed(0)
+    beta, wass_dist, _, best_lambda = SPARDACUS.fastSPARDA(xs, ys, lambdas=lambdas)
+
+    assert best_lambda in lambdas
+    assert np.linalg.norm(beta) == pytest.approx(1.0)
+    assert abs(beta[0]) > 0.9
+    assert np.isfinite(wass_dist)
+
+
+def test_fastsparda_cross_validation_needs_enough_samples():
+    rng = np.random.default_rng(0)
+
+    with pytest.raises(ValueError, match="num_folds"):
+        SPARDACUS.fastSPARDA(rng.normal(size=(50, 3)), rng.normal(size=(3, 3)), lambdas=[0, 0.1])
+
+
+def test_few_incorrect_samples_are_still_scored(separable_cage):
+    """Accurate models leave few incorrect samples per class (MNIST: 2-9 for
+    most classes). A single Gaussian fitted to 5 of them still ranks mistakes
+    well, so by default such a class is fitted, not marked unreliable."""
+    model_module, data_module, _, _ = separable_cage
+    spardacus = SPARDACUS(model_module, data_module)
+
+    density = spardacus._fit_gaussian_mixture(_bimodal(5), "incorrect", "aspen")
+
+    assert density is not None and density.n_components == 1
+    assert spardacus.unreliable_classes == set()
+
+
+def test_predicted_class_unseen_in_training_is_unscored_and_flagged(separable_cage):
+    """The data module's classes come from the training labels, so a model can
+    predict a class the cage has no entry for. That sample cannot be scored: it
+    gets the most suspicious p-value, like an unreliable class, instead of a KeyError."""
+    model_module, data_module, x_indices, y_true = separable_cage
+    spardacus = SPARDACUS(model_module, data_module, s_statistic_source="correctly")
+    spardacus.fit()
+
+    predicted = y_true.copy()
+    predicted[0] = 2  # not among the training classes {0, 1}
+    with pytest.warns(UserWarning, match="not seen"):
+        pvalues = spardacus.predict(x_indices, predicted)
+
+    assert pvalues[0] == 0.0
+    assert spardacus.flag(pvalues, threshold=0.01)[0]
+
+
+def test_fit_with_x_but_no_y_raises(separable_cage):
+    """Passing x alone used to pair it with the training labels, which belong to
+    other samples. It must be refused rather than silently mismatched."""
+    model_module, data_module, x_indices, _ = separable_cage
+    spardacus = SPARDACUS(model_module, data_module)
+
+    with pytest.raises(ValueError, match="y must be given"):
+        spardacus.fit(x=x_indices[:10])
+
+
+class TwoLayerMockModelModule(MockModelModule):
+    def __init__(self, activations, predictions):
+        super().__init__(activations, predictions)
+        self.selected_layers = ["layer1", "layer2"]
+
+    def _get_activations(self, x):
+        return {"layer1": self._activations[x], "layer2": -self._activations[x]}
+
+
+def test_several_layers_default_to_cauchy_combination(separable_cage):
+    """The paper combines layers with the Cauchy combination test, so several
+    layers must work without passing test_type_between_layers."""
+    model_module, data_module, x_indices, y_true = separable_cage
+    two_layers = TwoLayerMockModelModule(model_module._activations, model_module._predictions)
+    spardacus = SPARDACUS(two_layers, data_module)
+    spardacus.fit()
+
+    pvalues = spardacus.predict(x_indices, two_layers._get_predictions(x_indices))
+
+    assert spardacus.test_type_between_layers == "cauchy"
+    assert np.all((pvalues >= 0) & (pvalues <= 1))
+
+
+def test_running_the_module_as_a_script_does_not_crash():
+    import runpy
+
+    runpy.run_module("safetycage.methods.spardacus", run_name="__main__")

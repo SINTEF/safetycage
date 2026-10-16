@@ -1,5 +1,58 @@
 # Changelog
 
+## v0.0.67 (16/10/2026)
+
+### Fix
+
+- **Regression in 0.0.66:** `SPARDACUS` stopped working on accurate
+  models. 0.0.66 began flagging any class with fewer than
+  `minimum_sample_size` (default 10) incorrect training samples as
+  unreliable, and accurate models rarely reach that: on the MNIST
+  example 6-7 of 10 classes fell below it, and AUROC dropped from about
+  0.81 to 0.48. The default is now 3, the smallest allowed value. A
+  single Gaussian fitted to a handful of incorrect samples still ranks
+  mistakes well: MNIST AUROC is now 0.89 on the softmax layer and 0.83
+  on `dense_1`, above 0.0.65's 0.85 and 0.81. Users of 0.0.66 can pass
+  `minimum_sample_size=3` to get the same behaviour.
+- Samples that cannot be scored (predicted as an unreliable class, or a
+  class never seen in training) now get the most suspicious p-value (0
+  for `s_statistic_source="correctly"`, 1 for `"incorrectly"`) instead
+  of NaN, or a crash for unseen classes. They are always flagged for
+  review and stay in the metrics. `flag()` also treats a NaN statistic
+  as flagged under both settings; before, NaN was flagged under
+  `"incorrectly"` but trusted under `"correctly"`.
+- Monte Carlo p-values (the default) are now
+  `(1 + draws at least as extreme) / (Q + 1)` and can no longer be
+  exactly 0, which made Fisher's method and the Cauchy combination
+  ignore every other layer. They differ from before by less than
+  1 / Q = 1e-6 otherwise.
+- `SPARDACUS.CauchyCombinationTest()` rescales the weights to sum to 1,
+  as the test assumes (`[1, 3]` now means `[0.25, 0.75]`), and rejects
+  negative, all-zero or wrongly sized weights. The combined p-value uses
+  `cauchy.sf` for precision.
+- `SPARDACUS.fastSPARDA()` with more than one `lambdas` value crashed
+  (MATLAB-style 1-based slicing). Cross-validation is rewritten: shuffled
+  K-fold over both sample sets, warm-started fits, held-out projected
+  Wasserstein distance on the unit-length direction. The default
+  single-`lambdas` path is unchanged.
+- The direction search no longer prints progress every 100 iterations
+  by default (it flooded notebooks once 0.0.66 let it run fully); pass
+  `print_update=N` to `fastSPARDA()` to see it. "Failed to converge" is
+  now a `UserWarning` instead of a print.
+- `SPARDACUS.fit(x=...)` without `y` now raises a `ValueError` instead of
+  silently pairing `x` with the data module's training labels.
+- `test_type_between_layers` now defaults to `"cauchy"`, as in the
+  paper; before, fitting several layers without it raised an error.
+- Running `spardacus.py` as a script no longer crashes.
+
+### Note
+
+- The Gaussian mixture selection introduced in 0.0.66 (BIC on all
+  samples, at most one component per 10 samples) is kept. Compared with
+  0.0.65's 2-fold cross-validated selection on cover-type, MNIST and
+  CIFAR-10 (5 seeds, both layers, both `s_statistic_source` settings),
+  it was best or tied everywhere.
+
 ## v0.0.66 (16/10/2026)
 
 ### Breaking
