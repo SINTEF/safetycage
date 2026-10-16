@@ -674,7 +674,7 @@ class SPARDACUS(SafetyCage):
         if X_samples.shape[0] < Y_samples.shape[0]:#ensure n >= m with dim(X)=n,dim(y)=m by swapping
             X_samples, Y_samples = Y_samples, X_samples
 
-        n, d = X_samples.reshape(-1), X_samples.shape[1]
+        n, d = X_samples.shape
         m = Y_samples.shape[0]
 
         x_foldsize = n // num_folds

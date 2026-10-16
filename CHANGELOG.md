@@ -1,5 +1,16 @@
 # Changelog
 
+## v0.0.65 (16/10/2026)
+
+### Fix
+
+- `SPARDACUS.fastSPARDA()` set the sample count with
+  `n = X_samples.reshape(-1)`, which flattens the whole activation matrix
+  into one array instead of counting its rows. It now reads
+  `n, d = X_samples.shape`. The default single-`lambdas` path never used
+  `n`, so results there are unchanged; only the cross-validation fold
+  sizes (more than one `lambdas` value) depended on it.
+
 ## v0.0.64 (16/10/2026)
 
 ### License
