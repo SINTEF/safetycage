@@ -1,12 +1,28 @@
 from tqdm import tqdm
 import numpy as np
-from scipy.stats import cauchy, combine_pvalues, multivariate_normal
+from scipy.stats import cauchy, combine_pvalues
 from sklearn.mixture import GaussianMixture
-from sklearn.model_selection import GridSearchCV
 from statsmodels.distributions.empirical_distribution import ECDF
 import warnings
+from pathlib import Path
+
+import joblib
 
 from safetycage.safetycage import SafetyCage
+
+# Gaussian Mixture Model size limits, see _fit_gaussian_mixture
+GMM_MAX_COMPONENTS = 3
+GMM_SAMPLES_PER_COMPONENT = 10
+
+# Constructor settings that change how a fitted cage behaves, stored by save_cage
+SAVED_SETTINGS = (
+    "s_statistic_source",
+    "pvalue_method",
+    "calibration_fraction",
+    "test_type_between_layers",
+    "cauchy_weights_per_layer",
+    "minimum_sample_size",
+)
 
 class SPARDACUS(SafetyCage):
     """
@@ -19,8 +35,15 @@ class SPARDACUS(SafetyCage):
     The method models this by learning a projection that separates correct and 
     incorrect activations for each class and layer. During prediction after training,
     it projects a sample’s activation and evaluates how likely it is under both the 
-    correct and incorrect distributions. This comparison is then converted into a 
+    correct and incorrect distributions. This comparison is then converted into a
     p-value using fitted density estimators and ECDFs on the likelihood values.
+
+    By default (``pvalue_method="monte_carlo"``) the p-value follows the paper: the
+    ECDF is built from Monte Carlo draws of the fitted Gaussian mixture. As an opt-in
+    alternative, ``pvalue_method="conformal"`` holds out ``calibration_fraction`` of
+    the reference samples, fits on the rest, and computes the p-value from the held-out
+    samples' scores. Its p-values stay calibrated even when the Gaussian mixture fits
+    the data poorly, at the cost of fitting on fewer samples.
 
     The smaller the p-value, the more likely the sample is to be misclassified. When 
     multiple layers are used, a global p-value is found by combining the each layer's 
@@ -52,6 +75,9 @@ class SPARDACUS(SafetyCage):
         test_type_between_layers (str): Method for combining p-values across layers.
         minimum_sample_size (int): Minimum number of samples required to fit
             Gaussian Mixture Models.
+        pvalue_method (str): How p-values are computed ("monte_carlo" or "conformal").
+        calibration_fraction (float): Share of reference samples held out for
+            conformal p-values.
     """
     def __init__(self, model_module, data_module, **kwargs):
         """
@@ -60,22 +86,37 @@ class SPARDACUS(SafetyCage):
         Args:
             model_module: Reference to model module object for making predictions.
             data_module: Reference to data module object for handling data.
-            s_statistic_source (str): Source used to compute p-values ("correctly" or "incorrectly").
+            s_statistic_source (str, optional): Source used to compute p-values ("correctly" or "incorrectly"). (default: "correctly")
             threshold (float): Significance threshold for flagging samples.
             test_type_between_layers (str): Method for combining p-values ("fisher" or "cauchy").
             cauchy_weights_per_layer (list[float]): Weights for the Cauchy combination test.
             minimum_sample_size (int, optional): Minimum number of samples required to fit density models. (default: 10)
+            pvalue_method (str, optional): "monte_carlo" builds the ECDF from draws of the fitted Gaussian
+                mixture, as in the paper; "conformal" uses held-out calibration samples instead. (default: "monte_carlo")
+            calibration_fraction (float, optional): Share of the reference samples (correct ones for
+                s_statistic_source="correctly", incorrect ones for "incorrectly") held out for conformal
+                p-values. Only used when pvalue_method="conformal". (default: 0.3)
         """
         super(SPARDACUS, self).__init__(model_module, data_module, **kwargs)
 
-        self.s_statistic_source = kwargs.get("s_statistic_source")
+        self.s_statistic_source = kwargs.get("s_statistic_source", "correctly")
+        if self.s_statistic_source not in ("correctly", "incorrectly"):
+            raise ValueError(f"s_statistic_source must be \"correctly\" or \"incorrectly\". Provided: {self.s_statistic_source!r}")
         self.cauchy_weights_per_layer = kwargs.get("cauchy_weights_per_layer")
         self.test_type_between_layers = kwargs.get("test_type_between_layers")
 
-        # For the Gaussian Mixture Model fitting. Must be at least 3 based on current implementation (see _fit_gaussian_mixture). Default value is 10.
+        # For the Gaussian Mixture Model fitting: classes with fewer samples are flagged as unreliable
+        # (see _fit_gaussian_mixture). Must be at least 3, as fewer points cannot support a meaningful fit. Default value is 10.
         if "minimum_sample_size" in kwargs and kwargs["minimum_sample_size"] < 3:
             raise ValueError(f"Minimum_sample_size must be at least 3. Provided: {kwargs['minimum_sample_size']}")
         self.minimum_sample_size = kwargs.get("minimum_sample_size", 10)
+
+        self.pvalue_method = kwargs.get("pvalue_method", "monte_carlo")
+        if self.pvalue_method not in ("monte_carlo", "conformal"):
+            raise ValueError(f"pvalue_method must be \"monte_carlo\" or \"conformal\". Provided: {self.pvalue_method!r}")
+        self.calibration_fraction = kwargs.get("calibration_fraction", 0.3)
+        if not 0 < self.calibration_fraction < 1:
+            raise ValueError(f"calibration_fraction must be between 0 and 1 (exclusive). Provided: {self.calibration_fraction}")
 
         self.classes = data_module.classes
         self.unreliable_classes = set()
@@ -127,11 +168,16 @@ class SPARDACUS(SafetyCage):
         if y_pred is None:
             y_pred = self.model_module._get_predictions(x)
 
+        # Start from a clean slate so classes flagged by an earlier fit don't stick
+        self.unreliable_classes = set()
+
         if self.model_module.use_onehot_encoder:
-            mask = np.argmax(y_pred, axis=1) == np.argmax(y, axis=1)
+            predicted_classes = np.argmax(y_pred, axis=1)
+            mask = predicted_classes == np.argmax(y, axis=1)
         else:
+            predicted_classes = np.asarray(y_pred)
             mask = y_pred == y
-        
+
         if isinstance(x, dict):
             x_correct = {key: val[mask] for key, val in x.items()}
             x_incorrect = {key: val[~mask] for key, val in x.items()}
@@ -139,9 +185,13 @@ class SPARDACUS(SafetyCage):
             x_correct = x[mask]
             x_incorrect = x[~mask]
             
-        y_correct = y[mask]
-        y_incorrect = y[~mask]
-        
+        # Group by the class the model predicted, not the true class: predict()
+        # is called with the model's predictions, so the incorrect reference for
+        # class i must be samples wrongly predicted as i. (For correct samples
+        # the two are the same.)
+        predicted_correct = predicted_classes[np.asarray(mask)]
+        predicted_incorrect = predicted_classes[~np.asarray(mask)]
+
         # Get layer activations
         layers_activations = {
             "correct": self.model_module._get_activations(x_correct),
@@ -160,10 +210,10 @@ class SPARDACUS(SafetyCage):
                 
                 # Get class-specific activations
                 class_activations_correct = self._get_class_activations(
-                    layers_activations["correct"], layer, y_correct, class_key
+                    layers_activations["correct"], layer, predicted_correct, class_key
                 )
                 class_activations_incorrect = self._get_class_activations(
-                    layers_activations["incorrect"], layer, y_incorrect, class_key
+                    layers_activations["incorrect"], layer, predicted_incorrect, class_key
                 )
                 
                 # Process layer and class
@@ -183,18 +233,19 @@ class SPARDACUS(SafetyCage):
 
 
     def _get_class_activations(self, layer_activations: dict, layer: str,
-                            y_data: np.ndarray, class_index: int) -> np.ndarray:
+                            predicted_classes: np.ndarray, class_index: int) -> np.ndarray:
         """
-        Extract activations for a specific class (given by class_index) at a given layer.
-        Supports both one-hot encoded and integer labels.
+        Extract activations at a given layer for the samples predicted as a specific
+        class (given by class_index).
+
+        Args:
+            predicted_classes (numpy.ndarray): Predicted class index of each sample
+                (already reduced from one-hot or probability rows by ``fit``).
 
         Returns:
             numpy.ndarray: Activations for the specified class and layer
         """
-        if self.model_module.use_onehot_encoder:
-            return layer_activations[layer][y_data[:, class_index] == 1, :]
-        
-        return layer_activations[layer][y_data == class_index, :]
+        return layer_activations[layer][predicted_classes == class_index, :]
 
 
     def _process_layer_class(self, class_activations_correct: np.ndarray, class_activations_incorrect: np.ndarray, class_label: str) -> dict:
@@ -210,8 +261,18 @@ class SPARDACUS(SafetyCage):
             class_label (str): Class label
 
         Returns:
-            dict: Dictionary containing projection vectors, density models, and ECDFs for the class and layer
+            dict: Dictionary containing projection vectors, density models, and ECDFs (or, for
+            pvalue_method="conformal", sorted calibration scores) for the class and layer
         """
+        # For conformal p-values, hold out part of the reference samples before anything is fitted,
+        # so the calibration scores come from samples the projection and densities never saw
+        calibration_activations = None
+        if self.pvalue_method == "conformal":
+            if self.s_statistic_source == "correctly":
+                class_activations_correct, calibration_activations = self._split_calibration(class_activations_correct)
+            else:
+                class_activations_incorrect, calibration_activations = self._split_calibration(class_activations_incorrect)
+
         # Double check if both class_activations_correct and class_activations_incorrect have a positive number of values
         if len(class_activations_incorrect) == 0 or len(class_activations_correct) == 0:
             warnings.warn(f"No incorrect and/or correct samples for class \"{class_label}\" exist in layer activations. This class will be flagged as unreliable and the results "
@@ -222,7 +283,8 @@ class SPARDACUS(SafetyCage):
                 "ecdf_incorrect": None,
                 "beta_hat": None,
                 "density_correct": None,
-                "density_incorrect": None
+                "density_incorrect": None,
+                "calibration_scores": None
             }
         
         # Run fastSPARDA
@@ -247,7 +309,24 @@ class SPARDACUS(SafetyCage):
                 "ecdf_incorrect": None,
                 "beta_hat": None,
                 "density_correct": None,
-                "density_incorrect": None
+                "density_incorrect": None,
+                "calibration_scores": None
+            }
+
+        if self.pvalue_method == "conformal":
+            # Same statistic as in prediction, ln f_incorrect - ln f_correct, on the held-out samples
+            projected_calibration = np.dot(calibration_activations, beta_hat).reshape(-1, 1)
+            calibration_scores = np.sort(
+                density_incorrect.score_samples(projected_calibration)
+                - density_correct.score_samples(projected_calibration)
+            )
+            return {
+                "ecdf_correct": None,
+                "ecdf_incorrect": None,
+                "beta_hat": beta_hat,
+                "density_correct": density_correct,
+                "density_incorrect": density_incorrect,
+                "calibration_scores": calibration_scores
             }
 
         # Compute log PDFs
@@ -273,48 +352,72 @@ class SPARDACUS(SafetyCage):
             "ecdf_incorrect": ecdf_incorrect,
             "beta_hat": beta_hat,
             "density_correct": density_correct,
-            "density_incorrect": density_incorrect
+            "density_incorrect": density_incorrect,
+            "calibration_scores": None
         }
 
 
-    def _fit_gaussian_mixture(self, samples: np.ndarray, correctness: str, class_label: str) -> GaussianMixture:
+    def _split_calibration(self, activations: np.ndarray) -> tuple[np.ndarray, np.ndarray]:
         """
-        Notes:
-        - Throws an error if there are not enough samples to fit the model, but catches this error and throws a warning instead, returning the best estimator found by GridSearchCV even if it was not properly fitted.
+        Randomly split activations into a fitting part and a held-out calibration part
+        of calibration_fraction (at least one sample) for conformal p-values.
 
-        Fit a Gaussian Mixture Model to the given samples using GridSearchCV for hyperparameter tuning. 
-        Use cross-validation with 2-fold CV to select the number of components (1-3) and takes the BIC
-        average score of all folds to select the best model. 
-        
-        **WARNING:** In cases where there are too few samples (often by too few incorrect samples for 
-        well-performing models), the Gaussian Mixture Model may fail to fit properly (since it does not 
-        make sense to fit a gaussian to too few samples). In such cases, we recommend using a different 
-        safetycage method or ensuring enough incorrect and incorrect samples exist for each class.
+        Returns:
+            tuple: (fit activations, calibration activations)
+        """
+        n = len(activations)
+        n_calibration = min(n, max(1, int(round(self.calibration_fraction * n))))
+        order = np.random.permutation(n)
+        return activations[order[n_calibration:]], activations[order[:n_calibration]]
 
-        For most warning cases the error/warning will be handled below, and a clear warning statement is 
-        sent to output. In cases where there are many warnings, it is often a result of sklearn's 
-        GridSearchCV struggling to fit.
 
-        Consider the following warning cases:
-            - The provided number of samples is less than or minimum_sample_size (which itself has a minimum
-            value of 3 since we consider at most 3 components).
-            - All Gaussian fits fail (all 6, since there are 3 components to try and 2-fold CV). This is 
-            captured as an error and throws a warning. Gaussian fitting does not occur, the given class
-            is saved to self.unreliable_classes, and the method returns None.
-            - Not all fits failed, but all BIC scores are NaN values (meaning for all component options, 
-            at least 1 NaN value occured in the 2-fold CV). The given class is saved to self.unreliable_classes.
-            It returns the best estimator found by GridSearchCV, but the found parameter is simply the first one
-            available.
-            - Not all fits failed, but some BIC scores are NaN values. A warning is thrown that model selection 
-            may be unreliable, but the best estimator found by GridSearchCV is returned.
+    def _conformal_pvalue(self, calibration_scores: np.ndarray, statistic: float) -> float:
+        """
+        Conformal p-value of a statistic against sorted held-out calibration scores.
+
+        For s_statistic_source="correctly" (right-sided), counts calibration scores >= statistic;
+        for "incorrectly" (left-sided), counts scores <= statistic. The +1 in numerator and
+        denominator counts the new sample itself, so the p-value is never 0 and, for samples
+        drawn like the calibration ones, P(p <= alpha) <= alpha.
+
+        Args:
+            calibration_scores (numpy.ndarray): Sorted statistics of the held-out samples
+            statistic (float): Statistic of the new sample
+
+        Returns:
+            float: p-value in [1 / (n + 1), 1]
+        """
+        n = len(calibration_scores)
+        if self.s_statistic_source == "correctly":
+            count = n - np.searchsorted(calibration_scores, statistic, side="left")
+        else:
+            count = np.searchsorted(calibration_scores, statistic, side="right")
+        return (1 + count) / (n + 1)
+
+
+    def _fit_gaussian_mixture(self, samples: np.ndarray, correctness: str, class_label: str) -> GaussianMixture | None:
+        """
+        Fit a Gaussian Mixture Model to the given projected samples.
+
+        The number of components (1-3) is chosen by the lowest BIC, with every
+        candidate fitted on all samples. BIC already penalizes extra components,
+        so no cross-validation split is needed. To keep fits stable, a component
+        is only allowed for every GMM_SAMPLES_PER_COMPONENT samples: 10-19 samples
+        give a single Gaussian, 20-29 up to two, and 30 or more up to three.
+
+        **WARNING:** With fewer than minimum_sample_size samples (often too few incorrect
+        samples for well-performing models), no model is fitted: a warning is raised,
+        the class is added to self.unreliable_classes, and None is returned. In such
+        cases, we recommend using a different safetycage method or ensuring enough
+        correct and incorrect samples exist for each class.
 
         Args:
             samples (numpy.ndarray): Projected samples
-            correctness (str): whethering we are fitting predictions that were "correct" or "incorrect"
+            correctness (str): whether we are fitting predictions that were "correct" or "incorrect"
             class_label (str): Class label
 
         Returns:
-            GaussianMixture | None: Fitted model or None if fitting failed
+            GaussianMixture | None: Fitted model, or None if there were too few samples
         """
 
         if len(samples) < self.minimum_sample_size:
@@ -322,60 +425,23 @@ class SPARDACUS(SafetyCage):
                 f"[Gaussian Mixture Model WARNING] There are not enough {correctness} samples in the \"{class_label}\" class to fit a Gaussian Mixture Model. "
                 f"Provided: {len(samples)}. "
                 f"Minimum required: {self.minimum_sample_size}. "
-                f"We recommend that you use a different safetycage method.",
-                UserWarning
-        )
-        
-        param_grid = {
-            "n_components": range(1, 4),
-            "covariance_type": ["full"],
-        }
-        
-        grid_search = GridSearchCV(
-            estimator=GaussianMixture(),
-            param_grid=param_grid,
-            scoring=self.gmm_bic_score,
-            cv=2
-        )
-        
-        # Try Catch to catch ValueError thrown by sklearn when all fits fail, ignore sklearn warning when some fits fail
-        try:
-            # If fits fail, sklearn throws a long FitFailedWarning, catch this and let the warning message be provided by the if statement below.
-            with warnings.catch_warnings():
-                from sklearn.exceptions import FitFailedWarning
-                warnings.filterwarnings("ignore", category=FitFailedWarning)
-                warnings.filterwarnings(
-                    "ignore",
-                    message="One or more of the test scores are non-finite:.*",
-                    category=UserWarning,
-                    module="sklearn.model_selection._search"
-                )
-                grid_search.fit(samples.reshape(-1, 1))
-
-        except ValueError as e:
-            warnings.warn(
-                f"[Gaussian Mixture Model WARNING] All GMM fits failed for "
-                f"{correctness} samples in class \"{class_label}\". "
-                f"This class will be flagged as unreliable.",
+                f"This class will be flagged as unreliable. We recommend that you use a different safetycage method.",
                 UserWarning
             )
             self.unreliable_classes.add(class_label)
             return None
 
-        # Address the cases where all/some GMM fits fail during CV.
-        scores = grid_search.cv_results_["mean_test_score"]
+        samples = samples.reshape(-1, 1)
+        max_components = max(1, min(GMM_MAX_COMPONENTS, len(samples) // GMM_SAMPLES_PER_COMPONENT))
 
-        if np.isnan(scores).any():
-            warnings.warn(f"[Gaussian Mixture Model WARNING] There are not enough {correctness} samples in the \"{class_label}\" class to fit a Gaussian Mixture Model.")
+        best_density, best_bic = None, np.inf
+        for n_components in range(1, max_components + 1):
+            density = GaussianMixture(n_components=n_components, covariance_type="full").fit(samples)
+            bic = density.bic(samples)
+            if bic < best_bic:
+                best_density, best_bic = density, bic
 
-            if np.all(np.isnan(scores)):
-                # If all scores are NaN .best_estimator_ automatically chooses the first parameter (n_components=1, covariance_type='full').
-                warnings.warn(f"All mean BIC scores are NaN values. Hence, model selection is invalid. The results for the \"{class_label}\" class are unreliable and this class will be flagged as unreliable.")
-                self.unreliable_classes.add(class_label)
-            else:
-                warnings.warn(f"{np.sum(np.isnan(scores))} BIC score(s) are NaN values. Model selection for the \"{class_label}\" class may be unreliable.")
-        
-        return grid_search.best_estimator_
+        return best_density
 
 
     def _compute_log_pdfs(self, density_correct: GaussianMixture, density_incorrect: GaussianMixture, n_samples: int = int(1e6)) -> dict:
@@ -495,7 +561,12 @@ class SPARDACUS(SafetyCage):
                 ecdf_correct = self.layer_params[layer][class_label]["ecdf_correct"]
                 ecdf_incorrect = self.layer_params[layer][class_label]["ecdf_incorrect"]
                 
-                if self.s_statistic_source == "correctly":
+                if self.pvalue_method == "conformal":
+                    pvalue[sample_index,layer_index] = self._conformal_pvalue(
+                        self.layer_params[layer][class_label]["calibration_scores"], statistic[0]
+                    )
+
+                elif self.s_statistic_source == "correctly":
                     # Right-sided test. Small p-value indicates sample is incorrectly classfied
                     # ecdf_correct(statistic) returns a shape-(1,) array; numpy 2.x no longer
                     # allows assigning that into a scalar slot, so extract the scalar first.
@@ -604,6 +675,69 @@ class SPARDACUS(SafetyCage):
 
         return statistics_clean, y_true_clean
 
+    def save_cage(self, path):
+        """
+        Save the trained cage, including the settings that change how it computes p-values.
+
+        Args:
+            path (str or Path): File path to save to (should end in .joblib).
+
+        Raises:
+            ValueError: If the cage has not been trained (threshold not set).
+        """
+        if getattr(self, "threshold", None) is None:
+            raise ValueError("Cannot save: cage has not been trained (threshold is not set).")
+
+        parameters = {
+            "threshold": self.threshold,
+            "layer_params": getattr(self, "layer_params", None),
+            "unreliable_classes": self.unreliable_classes,
+            "settings": {name: getattr(self, name) for name in SAVED_SETTINGS},
+        }
+
+        path = Path(path)
+        path.parent.mkdir(parents=True, exist_ok=True)
+        joblib.dump(parameters, path)
+
+    @classmethod
+    def load_cage(cls, path, model_module, data_module, **kwargs):
+        """
+        Load a trained cage saved with save_cage.
+
+        The cage is rebuilt with the settings it was saved with. Keyword arguments
+        override saved settings. Files saved before settings were stored fall back to
+        the defaults (with a warning) unless the settings are passed here.
+
+        Args:
+            path (str or Path): Path to the saved .joblib file.
+            model_module: The model module to use with the loaded cage.
+            data_module: The data module to use with the loaded cage.
+            **kwargs: Settings that override the saved ones (e.g. test_type_between_layers).
+
+        Returns:
+            SPARDACUS: An instance with trained parameters and settings restored.
+        """
+        path = Path(path)
+        if not path.is_file():
+            raise FileNotFoundError(f"No saved cage found at {path}")
+
+        parameters = joblib.load(path)
+
+        if "settings" not in parameters:
+            warnings.warn(
+                f"{path} was saved without its settings (s_statistic_source, pvalue_method, ...). "
+                "Defaults are used for any setting not passed to load_cage; re-save the cage to store them.",
+                UserWarning
+            )
+        settings = {**parameters.get("settings", {}), **kwargs}
+
+        instance = cls(model_module=model_module, data_module=data_module, **settings)
+        instance.threshold = parameters["threshold"]
+        instance.layer_params = parameters.get("layer_params")
+        instance.unreliable_classes = set(parameters.get("unreliable_classes") or ())
+
+        return instance
+
     @staticmethod
     def CauchyCombinationTest(p_values, weights=None):
         """
@@ -621,8 +755,9 @@ class SPARDACUS(SafetyCage):
         """
 
         # If weights is None, put equal weight to each p-value:
-        if weights is None or weights == []:
+        if weights is None or len(weights) == 0:
             weights = np.ones(len(p_values))/len(p_values)
+        weights = np.asarray(weights, dtype=float)
 
         # Compute Cauchy statistic:
         C = np.sum(weights*np.tan((0.5-p_values)*np.pi))
@@ -770,14 +905,15 @@ class SPARDACUS(SafetyCage):
         if beta0 is None:
             beta0 = np.sqrt(d) / d / 2 * np.ones(d)
 
-        beta = beta0
+        # Copy so the in-place updates below never touch the caller's array
+        beta = np.array(beta0, dtype=float)
         last_cost = -np.inf
         cost = SPARDACUS.projectedWasserstein(xs, ys, beta) - _lambda * np.sum(np.abs(beta))
         grad = np.zeros(d)
 
         while iter_val < max_iter and cost - last_cost >= eps:
             last_cost = cost
-            last_beta = beta
+            last_beta = beta.copy()
             iter_val += 1
             step_size = learning_rate / np.sqrt(iter_val)
 
@@ -832,7 +968,8 @@ class SPARDACUS(SafetyCage):
 
             while cost - last_cost < eps and backtrack_tries <= MAX_BACKTRACKING:
                 step_size = learning_rate / np.log(iter_val + 1) * 2 ** (-backtrack_tries)
-                beta += step_size * grad
+                # Each backtracking try restarts from last_beta with a smaller step
+                beta = last_beta + step_size * grad
 
                 if beta[0] < 0:
                     beta = -beta
@@ -888,7 +1025,9 @@ class SPARDACUS(SafetyCage):
         best_beta = np.nan
 
         for i in range(1, max_iter + 1):
-            beta = multivariate_normal.rvs(mean=np.zeros(X_samples.shape[1]), cov=np.eye(X_samples.shape[1]))
+            # standard_normal always returns an array, even for a single feature
+            # (multivariate_normal.rvs returned a plain float then)
+            beta = np.random.standard_normal(X_samples.shape[1])
             beta /= np.linalg.norm(beta)
 
             if beta[0] < 0:
@@ -933,58 +1072,25 @@ class SPARDACUS(SafetyCage):
         # Projected SQUARED empirical Wasserstein distance in direction beta
         # between X_samples and Y_samples.
 
-        NUMERIC_FACTOR = 1e6  # used in ceil function to get the index of the quantile in the projected data vector.
-
         projected_xs = np.sort(X_samples.dot(beta))
         projected_ys = np.sort(Y_samples.dot(beta))
 
-        if len(projected_xs) < len(projected_ys):
-            projected_xs, projected_ys = projected_ys, projected_xs
-
         n = len(projected_xs)
         m = len(projected_ys)
-        eps = 1 / (n * m * NUMERIC_FACTOR)
-        dist = 0
-        quant_x = 0
-        quant_y = 0
-        last_quant = 0
-        x_index = 0
-        y_index = 0
-        while quant_x < 1 - eps or quant_y < 1 - eps:
-            next_quant_x = quant_x + 1 / n
-            next_quant_y = quant_y + 1 / m
-            proj_x = projected_xs[x_index] if x_index < n else float('inf')
-            proj_y = projected_ys[y_index] if y_index < m else float('inf')
 
-            while next_quant_x < next_quant_y - eps:
-                dist += (proj_x - proj_y) ** 2 * (next_quant_x - last_quant)
-                quant_x = next_quant_x
-                last_quant = quant_x
-                next_quant_x = quant_x + 1 / n
-                x_index = min(x_index + 1, n)
-                proj_x = projected_xs[x_index] if x_index < n else float('inf')
+        # Both empirical quantile functions are step functions. On the integer
+        # grid t = quantile * n * m, x steps every m units and y every n units,
+        # so merging the two sets of step points gives every interval where
+        # both are constant. Integers avoid the drift that summing 1/n and 1/m
+        # step by step accumulates, which could run past the end of the data.
+        breaks = np.union1d(np.arange(n + 1) * m, np.arange(m + 1) * n)
+        starts = breaks[:-1]
+        widths = np.diff(breaks)
 
-            if quant_x < 1 - eps or quant_y < 1 - eps:
-                if abs(next_quant_x - next_quant_y) < eps:
-                    dist += (proj_x - proj_y) ** 2 * (next_quant_x - last_quant)
-                    quant_x = next_quant_x
-                    quant_y = next_quant_y
-                    x_index += 1
-                    y_index += 1
-                    last_quant = quant_x
-                else:
-                    dist += (proj_x - proj_y) ** 2 * (next_quant_y - last_quant)
-                    quant_y = next_quant_y
-                    y_index = min(y_index + 1, m)
-                    last_quant = quant_y
+        diffs = projected_xs[starts // m] - projected_ys[starts // n]
 
-        return dist
+        return np.sum(diffs ** 2 * widths) / (n * m)
 
-    @staticmethod
-    def gmm_bic_score(estimator, X):
-        """Callable to pass to GridSearchCV that will use the BIC score."""
-        # Make it negative since GridSearchCV expects a score to maximize
-        return -estimator.bic(X)
 
 if __name__ == "__main__":
     SPARDACUS(None, None, None)

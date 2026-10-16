@@ -1,5 +1,83 @@
 # Changelog
 
+## v0.0.66 (16/10/2026)
+
+### Breaking
+
+- `SPARDACUS.fit()` grouped the incorrectly classified training samples
+  by their **true** class, so the "incorrect" reference for class i was
+  "truly i, but predicted as something else". `predict()` is called with
+  the model's **predictions**, and the paper (Johnsen & Remonato, 2025,
+  training algorithm) groups by predicted class. Both groups are now
+  formed from the predicted class, so the incorrect reference for class
+  i is "predicted as i, but wrong". One-hot labels and probability rows
+  are reduced with `argmax` first. This changes the fitted cage and its
+  p-values; re-fit any saved SPARDACUS cages.
+- Gaussian mixture selection in `SPARDACUS._fit_gaussian_mixture()` no
+  longer uses `GridSearchCV` with 2-fold cross-validation, which halved
+  the data for each fit and split it in order without shuffling. Every
+  candidate (1-3 components) is now fitted on all samples and the lowest
+  BIC wins, with at most one component per 10 samples (10-19 samples: 1,
+  20-29: up to 2, 30+: up to 3). Classes with fewer than
+  `minimum_sample_size` samples are now flagged as unreliable instead of
+  being fitted anyway. The `SPARDACUS.gmm_bic_score()` helper is removed.
+- `s_statistic_source` now defaults to `"correctly"` and any value other
+  than `"correctly"` or `"incorrectly"` raises a `ValueError`. Previously
+  a missing value made `predict()` return `inf` for every sample and
+  `flag()` crash.
+
+### Feature
+
+- `SPARDACUS(pvalue_method="conformal", calibration_fraction=0.3)`:
+  opt-in split-conformal p-values. A random `calibration_fraction` of the
+  reference samples (correct ones for `s_statistic_source="correctly"`,
+  incorrect ones for `"incorrectly"`) is held out, the projection and
+  densities are fitted on the rest, and a new sample's p-value is
+  `(1 + held-out scores at least as extreme) / (n_held_out + 1)`. These
+  p-values stay calibrated even when the Gaussian mixture fits poorly,
+  are never 0, and skip the 1-million-sample Monte Carlo step. The
+  default, `pvalue_method="monte_carlo"`, is the paper's method and is
+  unchanged.
+- `SPARDACUS.save_cage()` / `load_cage()` now store and restore the
+  settings that change how a fitted cage behaves (`s_statistic_source`,
+  `pvalue_method`, `calibration_fraction`, `test_type_between_layers`,
+  `cauchy_weights_per_layer`, `minimum_sample_size`). Keyword arguments
+  to `load_cage()` override saved settings. Previously a loaded cage
+  lost them all, so `s_statistic_source` came back as `None`. Files
+  saved by earlier versions still load, with a warning, using the
+  defaults.
+
+### Fix
+
+- `SPARDACUS.fit()` now clears `unreliable_classes` first, so a class
+  flagged by an earlier fit no longer stays flagged after re-fitting.
+- `SPARDACUS.CauchyCombinationTest()` crashed when the weights were a
+  NumPy array (`weights == []` compared element by element).
+- `SPARDACUS.randomProjectionSearch()` crashed on a layer with a single
+  feature, because `multivariate_normal.rvs` returned a plain float. It
+  now draws directions with `np.random.standard_normal`.
+- `SPARDACUS.l1SPARDA()` (the direction search behind `fastSPARDA()`)
+  stopped short of the best direction. `last_beta = beta` saved a
+  reference, not a copy, and `beta += step_size * grad` then changed both
+  in place. So when a step made the separation worse, the "undo" kept the
+  bad direction while still reporting the old, better cost, and each
+  backtracking retry built on the failed step instead of restarting from
+  the saved one. The search now copies `beta0` and `last_beta`, and every
+  retry starts from `last_beta`. It also no longer modifies the caller's
+  `beta0`. On a forest cover-type network the hidden-layer separation
+  for cottonwood/willow and aspen rose by about 60% (8.7 → 13.9 and
+  9.1 → 14.3); output-layer results were essentially unchanged.
+  `fit()` results change wherever a search step used to fail.
+
+- `SPARDACUS.projectedWasserstein()` returned `inf` or `nan` for some
+  pairs of sample sizes (e.g. 3140 and 3000), because adding `1/n` and
+  `1/m` step by step drifted past the end of the sorted samples. When
+  every candidate direction scored `nan`, `randomProjectionSearch()`
+  returned `nan` instead of a direction and `fastSPARDA()` crashed. The
+  distance is now computed on an integer grid of quantile step points,
+  so it is always finite. Values are otherwise identical (within 1e-12)
+  and the computation is about twice as fast.
+
 ## v0.0.65 (16/10/2026)
 
 ### Fix
