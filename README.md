@@ -6,7 +6,7 @@
   <a href="https://pypi.org/project/safetycage/"><img src="https://img.shields.io/pypi/v/safetycage.svg" alt="PyPI version"></a>
   <a href="https://safetycage.readthedocs.io/"><img src="https://img.shields.io/readthedocs/safetycage" alt="Docs"></a>
   <a href="https://pypi.org/project/safetycage/"><img src="https://img.shields.io/pypi/pyversions/safetycage.svg" alt="Python versions"></a>
-  <a href="https://github.com/SINTEF/safetycage/blob/main/LICENSE"><img src="https://img.shields.io/pypi/l/safetycage.svg" alt="License"></a>
+  <a href="https://github.com/SINTEF/safetycage/blob/main/LICENSE"><img src="https://img.shields.io/pypi/l/safetycage.svg?cacheSeconds=3600" alt="License"></a>
 </p>
 
 SafetyCage is a Python package for **detecting misclassified predictions** from machine learning models in classification tasks. It provides a unified interface for multiple statistical detection methods, enabling users to quantify prediction reliability and flag potentially incorrect outputs across different models and datasets easily.
