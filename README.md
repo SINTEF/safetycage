@@ -3,9 +3,9 @@
 </p>
 
 <p align="center">
-  <a href="https://pypi.org/project/safetycage/"><img src="https://img.shields.io/pypi/v/safetycage.svg" alt="PyPI version"></a>
+  <a href="https://pypi.org/project/safetycage/"><img src="https://img.shields.io/pypi/v/safetycage.svg?cacheSeconds=3600" alt="PyPI version"></a>
   <a href="https://safetycage.readthedocs.io/"><img src="https://img.shields.io/readthedocs/safetycage" alt="Docs"></a>
-  <a href="https://pypi.org/project/safetycage/"><img src="https://img.shields.io/pypi/pyversions/safetycage.svg" alt="Python versions"></a>
+  <a href="https://pypi.org/project/safetycage/"><img src="https://img.shields.io/python/required-version-toml?tomlFilePath=https%3A%2F%2Fraw.githubusercontent.com%2FSINTEF%2Fsafetycage%2Fmain%2Fpyproject.toml&cacheSeconds=3600" alt="Python versions"></a>
   <a href="https://github.com/SINTEF/safetycage/blob/main/LICENSE"><img src="https://img.shields.io/pypi/l/safetycage.svg?cacheSeconds=3600" alt="License"></a>
 </p>
 
